@@ -55,6 +55,187 @@ if not check_password():
     st.stop()
 
 # =====================================================================
+# 전역 모바일 반응형 & 타이포그래피 정돈 CSS 주입
+# =====================================================================
+def inject_custom_css():
+    st.markdown(
+        """
+        <style>
+        /* 1. 전역 한글 가독성 & 어색한 단내림/단어 쪼개짐 완벽 방지 */
+        html, body, [class*="css"], [class*="st-"], p, span, div, label, table, th, td {
+            word-break: keep-all !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", Roboto, sans-serif !important;
+        }
+
+        /* 2. 제목/헤더 모바일 반응형 폰트 스케일링 & 행간 최적화 */
+        h1 {
+            font-size: clamp(1.25rem, 4.8vw, 1.85rem) !important;
+            line-height: 1.25 !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.02em !important;
+            margin-bottom: 0.25rem !important;
+            word-break: keep-all !important;
+        }
+        h2 {
+            font-size: clamp(1.1rem, 3.8vw, 1.45rem) !important;
+            line-height: 1.3 !important;
+            font-weight: 700 !important;
+            word-break: keep-all !important;
+        }
+        h3 {
+            font-size: clamp(1.0rem, 3.2vw, 1.25rem) !important;
+            line-height: 1.3 !important;
+            font-weight: 700 !important;
+            word-break: keep-all !important;
+        }
+        h4 {
+            font-size: clamp(0.9rem, 2.8vw, 1.1rem) !important;
+            font-weight: 600 !important;
+            word-break: keep-all !important;
+        }
+
+        /* 3. 모바일 화면 최상단/좌우 여백 컴팩트화 */
+        .block-container {
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
+            max-width: 100% !important;
+        }
+
+        /* 4. Streamlit 메트릭(st.metric) 들쭉날쭉함 교정 */
+        [data-testid="stMetricValue"] {
+            font-size: clamp(1.15rem, 3.8vw, 1.45rem) !important;
+            font-weight: 700 !important;
+            line-height: 1.2 !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.8rem !important;
+            color: #475569 !important;
+            white-space: nowrap !important;
+        }
+        [data-testid="stMetricDelta"] {
+            font-size: 0.75rem !important;
+        }
+
+        /* 5. 탭(Tabs) 모바일 가로 스크롤 및 컴팩트 폰트 */
+        div[data-baseweb="tab-list"] {
+            gap: 4px !important;
+            overflow-x: auto !important;
+            flex-wrap: nowrap !important;
+            scrollbar-width: thin;
+        }
+        button[data-baseweb="tab"] {
+            padding: 6px 12px !important;
+            font-size: 0.85rem !important;
+            white-space: nowrap !important;
+        }
+
+        /* 6. 퍼널 관문 가로 스크롤 스텝 바 */
+        .funnel-scroll-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 4px 2px 10px 2px;
+            scrollbar-width: thin;
+            -webkit-overflow-scrolling: touch;
+        }
+        .funnel-step-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.78rem;
+            white-space: nowrap;
+            color: #334155;
+            flex-shrink: 0;
+        }
+        .funnel-step-chip.active {
+            background: #eff6ff;
+            border: 1.5px solid #2563eb;
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+        .funnel-arrow-sep {
+            color: #94a3b8;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        /* 7. 모바일 카드 전용 스타일 */
+        .m-card-box {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+        .m-card-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid #f1f5f9;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+        .m-company-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .m-company-meta {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .m-dcf-strip {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .m-grid-2x2-tiles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .m-tile-item {
+            background: #f8fafc;
+            border: 1px solid #f1f5f9;
+            border-radius: 6px;
+            padding: 6px 8px;
+            text-align: center;
+        }
+        .m-tile-item-lbl {
+            font-size: 0.72rem;
+            color: #64748b;
+            margin-bottom: 2px;
+            white-space: nowrap;
+        }
+        .m-tile-item-val {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+inject_custom_css()
+
+# =====================================================================
 # 유틸리티 함수: 숫자 포맷팅 및 엑셀 다운로드
 # =====================================================================
 def format_currency_amount(val: float, market: str) -> str:
@@ -890,18 +1071,23 @@ with hdr_col2:
         st.rerun()
 
 if funnel_stats:
-    cols = st.columns(len(funnel_stats))
+    chips_html = []
     for idx, stat in enumerate(funnel_stats):
-        with cols[idx]:
-            if idx == 0:
-                st.metric(label="① 전체 분석 대상", value=f"{stat['remaining']}개 기업")
-            else:
-                st.metric(
-                    label=f"관문: {stat['label'] if 'label' in stat else stat['stage']}",
-                    value=f"{stat['remaining']}개 생존",
-                    delta=f"단독 통과 {stat['single_pass']}개",
-                    delta_color="off",
-                )
+        if idx == 0:
+            st_name = "전체 유니버스"
+        else:
+            st_name = stat.get("label") or stat.get("stage", "")
+        cnt = stat["remaining"]
+        is_last = (idx == len(funnel_stats) - 1)
+        active_cls = "active" if is_last else ""
+        chips_html.append(
+            f"<div class='funnel-step-chip {active_cls}'>"
+            f"<span>{html.escape(st_name)}</span>"
+            f"<span style='color:{'#1d4ed8' if is_last else '#0f172a'}; font-weight:700;'>{cnt}개</span>"
+            f"</div>"
+        )
+    funnel_bar_html = "<div class='funnel-scroll-bar'>" + "<div class='funnel-arrow-sep'>➔</div>".join(chips_html) + "</div>"
+    st.markdown(funnel_bar_html, unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -1036,12 +1222,13 @@ with tab1:
         g_col_name = f"🔥 [역DCF] 기대성장률 g (r={required_return_r:.0f}%)"
 
         if view_mode == "📱 모바일 카드 뷰":
-            st.caption("💡 스마트폰에 최적화된 1장 요약 카드입니다. 카드의 버튼을 누르면 즉시 3개년 정밀 재무제표로 이동합니다.")
+            st.caption("💡 한 손에 쏙 들어오는 1장 요약 카드입니다. 카드의 버튼을 누르면 즉시 3개년 정밀 재무제표로 이동합니다.")
             for c_idx, row in disp_df.iterrows():
                 sym = row["symbol"]
                 name = row["name"]
                 mkt_d = row.get("market_display", row["market"])
                 mcap = row.get("시가총액_표시", "N/A")
+                fdate = row.get("fiscal_date", "N/A")
                 g_val = row.get("역DCF 기대성장률 (%)", np.nan)
                 fcf_y = row.get("정상화 FCF 수익률 (%)", np.nan)
                 gpm = row.get("GPM (%)", np.nan)
@@ -1050,33 +1237,60 @@ with tab1:
                 ccr_diag = row.get("CCR 상태 진단", "")
                 int_cov = row.get("이자보상배율_표시", "N/A")
 
-                with st.container(border=True):
-                    header_c1, header_c2 = st.columns([3, 2])
-                    with header_c1:
-                        st.markdown(f"#### **{name}** (`{sym}`)")
-                        st.caption(f"시장: `{mkt_d}` | 시총: `{mcap}` | 결산일: `{row.get('fiscal_date', 'N/A')}`")
-                    with header_c2:
-                        if pd.notna(g_val):
-                            st.metric(
-                                label=f"🔥 역DCF 기대성장률 (r={required_return_r:.0f}%)",
-                                value=f"{g_val:+.1f}%",
-                                delta=f"FCF수익률 {fcf_y:.1f}%" if pd.notna(fcf_y) else None,
-                            )
+                g_text = f"{g_val:+.1f}%" if pd.notna(g_val) else "N/A"
+                fcf_text = f"FCF수익률 {fcf_y:.1f}%" if pd.notna(fcf_y) else ""
+                gpm_str = f"{gpm:.1f}%" if pd.notna(gpm) else "N/A"
+                roce_str = f"{roce:.1f}%" if pd.notna(roce) else "N/A"
+                ccr_str = f"{ccr:.1f}%" if pd.notna(ccr) else "N/A"
 
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("🎯 GPM", f"{gpm:.1f}%" if pd.notna(gpm) else "N/A")
-                    m2.metric("🎯 ROCE", f"{roce:.1f}%" if pd.notna(roce) else "N/A")
-                    m3.metric("🎯 CCR", f"{ccr:.1f}%" if pd.notna(ccr) else "N/A")
-                    m4.metric("🎯 이자보상", str(int_cov))
+                diag_html = f"<div style='font-size:0.75rem; color:#475569; margin:4px 0 8px 0; background:#f8fafc; padding:4px 8px; border-radius:4px;'>🩺 <b>CCR 진단</b>: {html.escape(str(ccr_diag))}</div>" if (ccr_diag and ccr_diag != "-") else ""
 
-                    if ccr_diag and ccr_diag != "-":
-                        st.caption(f"🩺 **CCR 진단**: {ccr_diag}")
-
-                    if st.button(f"🔍 {name} 3개년 정밀 재무제표 & 듀퐁 해부 보기", key=f"btn_card_{sym}_{c_idx}", use_container_width=True):
-                        st.session_state["selected_symbol"] = sym
-                        st.session_state["target_tab_intent"] = "tab2"
-                        st.session_state["clear_passed_selection"] = True
-                        st.rerun()
+                card_html = f"""
+                <div class="m-card-box">
+                    <div class="m-card-header-row">
+                        <div>
+                            <span class="m-company-title">{html.escape(name)}</span>
+                            <span style="font-size:0.78rem; color:#64748b; margin-left:4px;">({html.escape(sym)})</span>
+                        </div>
+                        <div class="m-company-meta">{html.escape(str(mkt_d))} · {html.escape(str(mcap))}</div>
+                    </div>
+                    <div class="m-dcf-strip">
+                        <div>
+                            <div style="font-size:0.72rem; color:#c2410c; font-weight:600;">🔥 역DCF 기대성장률 (r={required_return_r:.0f}%)</div>
+                            <div style="font-size:1.15rem; font-weight:800; color:#9a3412; line-height:1.2;">{g_text}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:0.75rem; color:#ea580c; font-weight:600;">{fcf_text}</div>
+                            <div style="font-size:0.7rem; color:#78716c;">결산 {html.escape(str(fdate))}</div>
+                        </div>
+                    </div>
+                    <div class="m-grid-2x2-tiles">
+                        <div class="m-tile-item">
+                            <div class="m-tile-item-lbl">🎯 GPM (원가방어)</div>
+                            <div class="m-tile-item-val">{gpm_str}</div>
+                        </div>
+                        <div class="m-tile-item">
+                            <div class="m-tile-item-lbl">🎯 ROCE (자본배치)</div>
+                            <div class="m-tile-item-val">{roce_str}</div>
+                        </div>
+                        <div class="m-tile-item">
+                            <div class="m-tile-item-lbl">🎯 CCR (현금창출)</div>
+                            <div class="m-tile-item-val">{ccr_str}</div>
+                        </div>
+                        <div class="m-tile-item">
+                            <div class="m-tile-item-lbl">🎯 이자보상배율</div>
+                            <div class="m-tile-item-val" style="font-size:0.85rem;">{html.escape(str(int_cov))}</div>
+                        </div>
+                    </div>
+                    {diag_html}
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+                if st.button(f"🔍 {name} 3개년 정밀 재무제표 & 듀퐁 해부 보기", key=f"btn_card_{sym}_{c_idx}", use_container_width=True):
+                    st.session_state["selected_symbol"] = sym
+                    st.session_state["target_tab_intent"] = "tab2"
+                    st.session_state["clear_passed_selection"] = True
+                    st.rerun()
         else:
             st.caption("👉 **기업 행을 클릭**하면 해당 기업의 **[🔬 개별 기업 정밀 해부]** 탭으로 즉시 이동하여 3개년 추이를 확인합니다.")
             event_passed = st.dataframe(
@@ -1180,34 +1394,36 @@ with tab2:
     no_growth_val = (norm_fcf_v / (required_return_r / 100.0)) if pd.notna(norm_fcf_v) and required_return_r > 0 else np.nan
 
     st.markdown("#### 🔥 0️⃣ 역DCF 밸류에이션 온도계 (`정상화 FCF = OCF - 감가상각비` 기준)")
-    v1, v2, v3, v4 = st.columns(4)
-    v1.metric(
-        "정상화 FCF (OCF - D&A) ⓘ",
-        format_currency_amount(norm_fcf_v, mkt_code),
-        help=get_metric_tooltip("정상화 FCF"),
-    )
-    v2.metric(
-        "정상화 FCF 수익률 (Yield) ⓘ",
-        f"{fcf_yield_v:.2f}%" if pd.notna(fcf_yield_v) else "N/A",
-        help=get_metric_tooltip("정상화 FCF 수익률 (%)"),
-    )
-    v3.metric(
-        f"🔥 역DCF 내포 기대성장률 (g) ⓘ",
-        f"{implied_g_v:+.2f}%" if pd.notna(implied_g_v) else "N/A",
-        delta=f"요구수익률 r = {required_return_r:.1f}% 기준",
-        delta_color="off",
-        help=get_metric_tooltip("역DCF 기대성장률 (%)"),
-    )
-    v4.metric(
-        f"무성장 내재가치 (g=0%, r={required_return_r:.0f}%) ⓘ",
-        format_currency_amount(no_growth_val, mkt_code) if pd.notna(no_growth_val) and no_growth_val > 0 else "N/A",
-        help=get_metric_tooltip("무성장 내재가치"),
-    )
+    fcf_val_str = format_currency_amount(norm_fcf_v, mkt_code)
+    fcf_yield_str = f"{fcf_yield_v:.2f}%" if pd.notna(fcf_yield_v) else "N/A"
+    g_val_str = f"{implied_g_v:+.2f}%" if pd.notna(implied_g_v) else "N/A"
+    no_growth_str = format_currency_amount(no_growth_val, mkt_code) if pd.notna(no_growth_val) and no_growth_val > 0 else "N/A"
+
+    dcf_tiles_html = f"""
+    <div class="m-grid-2x2-tiles" style="margin-bottom:10px;">
+        <div class="m-tile-item" style="padding:10px; border-left:3px solid #2563eb;">
+            <div class="m-tile-item-lbl">정상화 FCF (OCF - D&A)</div>
+            <div class="m-tile-item-val" style="font-size:1.1rem; color:#1d4ed8;">{fcf_val_str}</div>
+        </div>
+        <div class="m-tile-item" style="padding:10px; border-left:3px solid #059669;">
+            <div class="m-tile-item-lbl">정상화 FCF 수익률 (Yield)</div>
+            <div class="m-tile-item-val" style="font-size:1.1rem; color:#047857;">{fcf_yield_str}</div>
+        </div>
+        <div class="m-tile-item" style="padding:10px; border-left:3px solid #ea580c; background:#fff7ed;">
+            <div class="m-tile-item-lbl" style="color:#c2410c;">🔥 역DCF 기대성장률 (g)</div>
+            <div class="m-tile-item-val" style="font-size:1.15rem; color:#9a3412;">{g_val_str}</div>
+        </div>
+        <div class="m-tile-item" style="padding:10px; border-left:3px solid #64748b;">
+            <div class="m-tile-item-lbl">무성장 내재가치 (g=0%)</div>
+            <div class="m-tile-item-val" style="font-size:1.1rem; color:#334155;">{no_growth_str}</div>
+        </div>
+    </div>
+    """
+    st.markdown(dcf_tiles_html, unsafe_allow_html=True)
 
     st.caption(
-        f"📐 **산출 근거**: $\\text{{정상화 FCF}} = \\text{{OCF}}({format_currency_amount(row_data['ocf'], mkt_code)}) - \\text{{감가상각비}}({format_currency_amount(row_data['da'], mkt_code)}) = {format_currency_amount(norm_fcf_v, mkt_code)}$ "
-        f"$\\implies \\text{{FCF Yield}} = \\frac{{\\text{{정상화 FCF}}}}{{\\text{{시가총액}}({row_data['시가총액_표시']})}} = {fcf_yield_v:.2f}\\%$ "
-        f"$\\implies \\mathbf{{g = r({required_return_r:.1f}\\%) - \\text{{FCF Yield}}({fcf_yield_v:.2f}\\%) = {implied_g_v:+.2f}\\%}}$"
+        f"📐 **산출 근거**: 정상화 FCF `{fcf_val_str}` ÷ 시가총액 `{row_data['시가총액_표시']}` = **FCF Yield `{fcf_yield_str}`** "
+        f"➡️ **내포 기대성장률 g = {required_return_r:.1f}% - {fcf_yield_str} = `{g_val_str}`**"
     )
     st.markdown("---")
 
@@ -1292,12 +1508,12 @@ with tab2:
                 line=dict(color="#dc2626", width=3),
             ))
             fig_margin.update_layout(
-                title="📈 마진율 & ROCE 3개년 궤적 (GPM · OPM · ROCE)",
+                title=dict(text="📈 마진율 & ROCE 3개년 궤적", font=dict(size=13)),
                 xaxis_title="결산연도",
                 yaxis_title="비율 (%)",
                 height=320,
-                margin=dict(l=20, r=20, t=40, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=15, r=15, t=35, b=50),
+                legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5, font=dict(size=11)),
             )
             st.plotly_chart(fig_margin, use_container_width=True)
 
@@ -1334,13 +1550,13 @@ with tab2:
                 line=dict(color="#f59e0b", width=2, dash="dot"),
             ))
             fig_cf.update_layout(
-                title=f"💵 이익 vs 현금흐름 3개년 비교 (단위: {u_str})",
+                title=dict(text=f"💵 이익 vs 현금흐름 3개년 ({u_str})", font=dict(size=13)),
                 barmode="group",
                 xaxis_title="결산연도",
                 yaxis_title=u_str,
                 height=320,
-                margin=dict(l=20, r=20, t=40, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=15, r=15, t=35, b=50),
+                legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5, font=dict(size=11)),
             )
             st.plotly_chart(fig_cf, use_container_width=True)
 
@@ -1358,22 +1574,26 @@ with tab2:
         ebit_m_v = row_data["EBIT Margin (%)"]
         turn_v = row_data["사용자본회전율 (배)"]
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric(
-            "🎯 GPM (매출총이익률) ⓘ",
-            f"{gpm_v:.1f}%" if pd.notna(gpm_v) else "N/A",
-            help=get_metric_tooltip("GPM (%)"),
-        )
-        m2.metric(
-            "📎 [참고] OPM (영업이익률) ⓘ",
-            f"{opm_v:.1f}%" if pd.notna(opm_v) else "N/A",
-            help=get_metric_tooltip("OPM (%)"),
-        )
-        m3.metric(
-            "🎯 이자보상배율 ⓘ",
-            str(row_data["이자보상배율_표시"]),
-            help=get_metric_tooltip("이자보상배율"),
-        )
+        gpm_str_val = f"{gpm_v:.1f}%" if pd.notna(gpm_v) else "N/A"
+        opm_str_val = f"{opm_v:.1f}%" if pd.notna(opm_v) else "N/A"
+
+        m_dupont_html = f"""
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; margin:8px 0 12px 0;">
+            <div class="m-tile-item">
+                <div class="m-tile-item-lbl">🎯 GPM</div>
+                <div class="m-tile-item-val">{gpm_str_val}</div>
+            </div>
+            <div class="m-tile-item">
+                <div class="m-tile-item-lbl">📎 OPM</div>
+                <div class="m-tile-item-val">{opm_str_val}</div>
+            </div>
+            <div class="m-tile-item">
+                <div class="m-tile-item-lbl">🎯 이자보상</div>
+                <div class="m-tile-item-val" style="font-size:0.85rem;">{html.escape(str(row_data['이자보상배율_표시']))}</div>
+            </div>
+        </div>
+        """
+        st.markdown(m_dupont_html, unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown(
@@ -1417,22 +1637,28 @@ with tab2:
         fcf_v = row_data["fcf"]
         ebit_v = row_data["operating_income"]
 
-        c_m1, c_m2, c_m3 = st.columns(3)
-        c_m1.metric(
-            "🎯 CCR (현금전환율) ⓘ",
-            f"{ccr_v:.1f}%" if pd.notna(ccr_v) else "N/A",
-            help=get_metric_tooltip("CCR (%)"),
-        )
-        c_m2.metric(
-            "📎 CapEx / 감가상각비 ⓘ",
-            f"{capex_da_ratio:.0f}%" if pd.notna(capex_da_ratio) else "N/A",
-            help=get_metric_tooltip("CapEx/감가상각비 (%)"),
-        )
-        c_m3.metric(
-            "📎 운전자본변동 / EBIT ⓘ",
-            f"{row_data['운전자본변동/EBIT (%)']:+.1f}%" if pd.notna(row_data["운전자본변동/EBIT (%)"]) else "N/A",
-            help=get_metric_tooltip("운전자본변동/EBIT (%)"),
-        )
+        wc_ebit_v = row_data.get("운전자본변동/EBIT (%)", np.nan)
+        wc_ebit_str = f"{wc_ebit_v:+.1f}%" if pd.notna(wc_ebit_v) else "N/A"
+        ccr_str_val = f"{ccr_v:.1f}%" if pd.notna(ccr_v) else "N/A"
+        capex_da_str = f"{capex_da_ratio:.0f}%" if pd.notna(capex_da_ratio) else "N/A"
+
+        m_ccr_html = f"""
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; margin:8px 0 12px 0;">
+            <div class="m-tile-item" style="border-left:3px solid #2563eb;">
+                <div class="m-tile-item-lbl">🎯 CCR (전환율)</div>
+                <div class="m-tile-item-val">{ccr_str_val}</div>
+            </div>
+            <div class="m-tile-item">
+                <div class="m-tile-item-lbl">📎 CapEx/D&A</div>
+                <div class="m-tile-item-val">{capex_da_str}</div>
+            </div>
+            <div class="m-tile-item">
+                <div class="m-tile-item-lbl">📎 운전자본/EBIT</div>
+                <div class="m-tile-item-val">{wc_ebit_str}</div>
+            </div>
+        </div>
+        """
+        st.markdown(m_ccr_html, unsafe_allow_html=True)
 
         st.markdown(f"**자동 진단 요약**: `{row_data['CCR 상태 진단']}`")
 
