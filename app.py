@@ -160,31 +160,33 @@ def inject_tds_css() -> None:
             margin-bottom: 10px !important;
         }
 
-        /* 6. 버튼 스타일 (토스 라운드 버튼) */
-        .stButton > button {
+        /* 6. 버튼 스타일 (토스 라운드 캡슐 버튼 - 흰색 카드 내부에서 선명하게 구분) */
+        .stButton > button, .stPopover > div > button {
             border-radius: 12px !important;
             font-weight: 700 !important;
             font-size: 0.84rem !important;
-            padding: 0.45rem 0.9rem !important;
+            padding: 0.48rem 0.95rem !important;
             border: 1px solid #E5E8EB !important;
             transition: all 0.15s ease !important;
         }
         .stButton > button[kind="primary"] {
+            background-color: #E8F3FF !important;
+            border-color: #CFE2FF !important;
+            color: #1B64DA !important;
+        }
+        .stButton > button[kind="primary"]:hover {
             background-color: #3182F6 !important;
             border-color: #3182F6 !important;
             color: #FFFFFF !important;
         }
-        .stButton > button[kind="primary"]:hover {
-            background-color: #1B64DA !important;
-            border-color: #1B64DA !important;
-        }
-        .stButton > button[kind="secondary"] {
+        .stButton > button[kind="secondary"], .stPopover > div > button {
             background-color: #F2F4F6 !important;
-            border-color: transparent !important;
+            border: 1px solid #E5E8EB !important;
             color: #333D4B !important;
         }
-        .stButton > button[kind="secondary"]:hover {
+        .stButton > button[kind="secondary"]:hover, .stPopover > div > button:hover {
             background-color: #E5E8EB !important;
+            border-color: #D1D6DB !important;
             color: #191F28 !important;
         }
 
@@ -229,22 +231,14 @@ def inject_tds_css() -> None:
             flex-shrink: 0;
         }
 
-        /* 8. 토스 종목 카드 (.tds-card) */
+        /* 8. 토스 종목 카드 본문 (.tds-card - 부모 st.container(border=True)와 일체화) */
         .tds-card {
-            background: #FFFFFF;
-            border-radius: 20px;
-            padding: 20px 22px 16px 22px;
-            margin-bottom: 8px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.035);
-            border: 1.5px solid transparent;
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .tds-card:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.065);
+            background: transparent;
+            padding: 2px 2px 6px 2px;
+            margin-bottom: 4px;
         }
         .tds-card.in-universe {
-            border-color: rgba(49, 130, 246, 0.35);
-            background: #FFFFFF;
+            background: transparent;
         }
         .tds-card-top {
             display: flex;
@@ -1739,139 +1733,140 @@ with tab_screener:
             for c_idx, row in disp_df.iterrows():
                 col_container = grid_cols[c_idx % 2]
                 with col_container:
-                    sym = row["symbol"]
-                    name = row["name"]
-                    mkt_code = str(row["market"]).upper()
-                    mkt_d = row.get("market_display", row["market"])
-                    mcap = row.get("시가총액_표시", "N/A")
-                    fdate = row.get("fiscal_date", "N/A")
-                    yr_cnt = int(row.get("평균_연도수", 1))
+                    with st.container(border=True):
+                        sym = row["symbol"]
+                        name = row["name"]
+                        mkt_code = str(row["market"]).upper()
+                        mkt_d = row.get("market_display", row["market"])
+                        mcap = row.get("시가총액_표시", "N/A")
+                        fdate = row.get("fiscal_date", "N/A")
+                        yr_cnt = int(row.get("평균_연도수", 1))
 
-                    g_val = row.get("역DCF 기대성장률 (%)", np.nan)
-                    g_5y = row.get("역DCF 기대성장률_5Y (%)", np.nan)
-                    fcf_y = row.get("정상화 FCF 수익률 (%)", np.nan)
-                    fcf_y_5y = row.get("정상화 FCF 수익률_5Y (%)", np.nan)
+                        g_val = row.get("역DCF 기대성장률 (%)", np.nan)
+                        g_5y = row.get("역DCF 기대성장률_5Y (%)", np.nan)
+                        fcf_y = row.get("정상화 FCF 수익률 (%)", np.nan)
+                        fcf_y_5y = row.get("정상화 FCF 수익률_5Y (%)", np.nan)
 
-                    gpm, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
-                    roce, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
-                    ccr, ccr_5y = row.get("CCR (%)", np.nan), row.get("CCR_5Y (%)", np.nan)
-                    opm, opm_5y = row.get("OPM (%)", np.nan), row.get("OPM_5Y (%)", np.nan)
-                    ccr_diag = row.get("CCR 상태 진단", "")
-                    int_cov = row.get("이자보상배율_표시", "N/A")
+                        gpm, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
+                        roce, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
+                        ccr, ccr_5y = row.get("CCR (%)", np.nan), row.get("CCR_5Y (%)", np.nan)
+                        opm, opm_5y = row.get("OPM (%)", np.nan), row.get("OPM_5Y (%)", np.nan)
+                        ccr_diag = row.get("CCR 상태 진단", "")
+                        int_cov = row.get("이자보상배율_표시", "N/A")
 
-                    fail_cnt = int(row.get("미달_조건수", 0))
-                    status_summary = str(row.get("통과_상태_요약", ""))
-                    if fail_cnt == 0:
-                        badge_html = f"<span class='tds-badge green'>{html.escape(status_summary)}</span>"
-                    elif fail_cnt == 1:
-                        badge_html = f"<span class='tds-badge amber'>{html.escape(status_summary)}</span>"
-                    else:
-                        badge_html = f"<span class='tds-badge red'>{html.escape(status_summary)}</span>"
-
-                    in_uni = sym in universe_store
-                    uni_star = "<span class='tds-badge blue' style='margin-left:4px;'>⭐ 보관중</span>" if in_uni else ""
-                    box_cls = "tds-card in-universe" if in_uni else "tds-card"
-
-                    # 개별 지표 미달 여부 하이라이트 클래스
-                    gpm_miss = "missed" if (f"통과_{gpm_col_target}" in row and not bool(row[f"통과_{gpm_col_target}"])) else ""
-                    roce_miss = "missed" if (f"통과_{roce_col_target}" in row and not bool(row[f"통과_{roce_col_target}"])) else ""
-                    ccr_miss = "missed" if (f"통과_{ccr_col_target}" in row and not bool(row[f"통과_{ccr_col_target}"])) else ""
-                    icr_miss = "missed" if ("통과_이자보상배율 (배)" in row and not bool(row["통과_이자보상배율 (배)"])) else ""
-
-                    g_text = f"연 {g_val:+.1f}%" if pd.notna(g_val) else "N/A"
-                    g_5y_text = f"과거 {yr_cnt}년 당시시총 평균 {g_5y:+.1f}%" if pd.notna(g_5y) else ""
-                    fcf_text = f"{fcf_y:.1f}%" if pd.notna(fcf_y) else "N/A"
-                    fcf_5y_text = f"과거 {yr_cnt}년 평균 {fcf_y_5y:.1f}%" if pd.notna(fcf_y_5y) else ""
-
-                    gpm_str = f"{gpm:.1f}%" if pd.notna(gpm) else "N/A"
-                    gpm_5y_str = f"{yr_cnt}년 평균 {gpm_5y:.1f}%" if pd.notna(gpm_5y) else "-"
-                    roce_str = f"{roce:.1f}%" if pd.notna(roce) else "N/A"
-                    roce_5y_str = f"{yr_cnt}년 평균 {roce_5y:.1f}%" if pd.notna(roce_5y) else "-"
-                    ccr_str = f"{ccr:.1f}%" if pd.notna(ccr) else "N/A"
-                    ccr_5y_str = f"{yr_cnt}년 평균 {ccr_5y:.1f}%" if pd.notna(ccr_5y) else "-"
-                    opm_5y_str = f"OPM {opm:.1f}% ({yr_cnt}년 {opm_5y:.1f}%)" if (pd.notna(opm) and pd.notna(opm_5y)) else ""
-
-                    diag_html = (
-                        f"<div class='tds-ccr-caption'>현금흐름 진단 · {html.escape(str(ccr_diag))}</div>"
-                        if (ccr_diag and ccr_diag != "-")
-                        else ""
-                    )
-
-                    memo_preview_html = ""
-                    if in_uni and universe_store[sym].get("memo"):
-                        memo_preview_html = render_memo_with_links_html(universe_store[sym]["memo"])
-
-                    card_html = f"""
-                    <div class="{box_cls}">
-                        <div class="tds-card-top">
-                            <div>
-                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                    <span class="tds-comp-name">{html.escape(name)}</span>
-                                    {badge_html}
-                                    {uni_star}
-                                </div>
-                                <div class="tds-comp-sub">{html.escape(sym)} · {html.escape(str(mkt_d))} · 결산 {html.escape(str(fdate))}</div>
-                            </div>
-                            <div>
-                                <div class="tds-mcap-text">{html.escape(str(mcap))}</div>
-                            </div>
-                        </div>
-                        <div class="tds-val-banner blue-tint">
-                            <div>
-                                <div class="tds-val-lbl">영구 역DCF 기대성장률 (r={required_return_r:.0f}%)</div>
-                                <div class="tds-val-main accent">{g_text}</div>
-                                <div class="tds-val-sub">{g_5y_text}</div>
-                            </div>
-                            <div style="text-align:right;">
-                                <div class="tds-val-lbl">정상화 FCF 수익률</div>
-                                <div class="tds-val-main" style="font-size:1.12rem;">{fcf_text}</div>
-                                <div class="tds-val-sub">{fcf_5y_text}</div>
-                            </div>
-                        </div>
-                        <div class="tds-metric-grid">
-                            <div class="tds-metric-cell {gpm_miss}">
-                                <div class="tds-m-lbl">매출총이익률 GPM</div>
-                                <div class="tds-m-val">{gpm_str}</div>
-                                <div class="tds-m-avg">{gpm_5y_str}</div>
-                            </div>
-                            <div class="tds-metric-cell {roce_miss}">
-                                <div class="tds-m-lbl">자본이익률 ROCE</div>
-                                <div class="tds-m-val">{roce_str}</div>
-                                <div class="tds-m-avg">{roce_5y_str}</div>
-                            </div>
-                            <div class="tds-metric-cell {ccr_miss}">
-                                <div class="tds-m-lbl">현금전환율 CCR</div>
-                                <div class="tds-m-val">{ccr_str}</div>
-                                <div class="tds-m-avg">{ccr_5y_str}</div>
-                            </div>
-                            <div class="tds-metric-cell {icr_miss}">
-                                <div class="tds-m-lbl">이자보상 · OPM</div>
-                                <div class="tds-m-val" style="font-size:0.92rem;">{html.escape(str(int_cov))}</div>
-                                <div class="tds-m-avg">{html.escape(opm_5y_str)}</div>
-                            </div>
-                        </div>
-                        {diag_html}
-                        {memo_preview_html}
-                    </div>
-                    """
-                    render_raw_html(card_html)
-
-                    btn_c1, btn_c2 = st.columns([3.2, 1.3])
-                    with btn_c1:
-                        if st.button(f"{name} 상세 분석 보기", key=f"btn_detail_{sym}_{c_idx}", type="secondary", use_container_width=True):
-                            open_company_detail(sym, return_tab="screener")
-                            st.rerun()
-                    with btn_c2:
-                        if in_uni:
-                            if st.button("⭐ 해제", key=f"btn_uni_{sym}_{c_idx}", type="secondary", use_container_width=True):
-                                de.remove_universe_item(sym)
-                                st.toast(f"🗑️ {name} 유니버스 해제")
-                                st.rerun()
+                        fail_cnt = int(row.get("미달_조건수", 0))
+                        status_summary = str(row.get("통과_상태_요약", ""))
+                        if fail_cnt == 0:
+                            badge_html = f"<span class='tds-badge green'>{html.escape(status_summary)}</span>"
+                        elif fail_cnt == 1:
+                            badge_html = f"<span class='tds-badge amber'>{html.escape(status_summary)}</span>"
                         else:
-                            if st.button("⭐ 보관", key=f"btn_uni_{sym}_{c_idx}", type="secondary", use_container_width=True):
-                                de.upsert_universe_item(symbol=sym, name=name, market=mkt_code)
-                                st.toast(f"⭐ {name} 유니버스 보관 완료!")
+                            badge_html = f"<span class='tds-badge red'>{html.escape(status_summary)}</span>"
+
+                        in_uni = sym in universe_store
+                        uni_star = "<span class='tds-badge blue' style='margin-left:4px;'>⭐ 보관중</span>" if in_uni else ""
+                        box_cls = "tds-card in-universe" if in_uni else "tds-card"
+
+                        # 개별 지표 미달 여부 하이라이트 클래스
+                        gpm_miss = "missed" if (f"통과_{gpm_col_target}" in row and not bool(row[f"통과_{gpm_col_target}"])) else ""
+                        roce_miss = "missed" if (f"통과_{roce_col_target}" in row and not bool(row[f"통과_{roce_col_target}"])) else ""
+                        ccr_miss = "missed" if (f"통과_{ccr_col_target}" in row and not bool(row[f"통과_{ccr_col_target}"])) else ""
+                        icr_miss = "missed" if ("통과_이자보상배율 (배)" in row and not bool(row["통과_이자보상배율 (배)"])) else ""
+
+                        g_text = f"연 {g_val:+.1f}%" if pd.notna(g_val) else "N/A"
+                        g_5y_text = f"최근 포함 {yr_cnt}년 평균 {g_5y:+.1f}%" if pd.notna(g_5y) else ""
+                        fcf_text = f"{fcf_y:.1f}%" if pd.notna(fcf_y) else "N/A"
+                        fcf_5y_text = f"최근 포함 {yr_cnt}년 평균 {fcf_y_5y:.1f}%" if pd.notna(fcf_y_5y) else ""
+
+                        gpm_str = f"{gpm:.1f}%" if pd.notna(gpm) else "N/A"
+                        gpm_5y_str = f"{yr_cnt}년 평균 {gpm_5y:.1f}%" if pd.notna(gpm_5y) else "-"
+                        roce_str = f"{roce:.1f}%" if pd.notna(roce) else "N/A"
+                        roce_5y_str = f"{yr_cnt}년 평균 {roce_5y:.1f}%" if pd.notna(roce_5y) else "-"
+                        ccr_str = f"{ccr:.1f}%" if pd.notna(ccr) else "N/A"
+                        ccr_5y_str = f"{yr_cnt}년 평균 {ccr_5y:.1f}%" if pd.notna(ccr_5y) else "-"
+                        opm_5y_str = f"OPM {opm:.1f}% ({yr_cnt}년 {opm_5y:.1f}%)" if (pd.notna(opm) and pd.notna(opm_5y)) else ""
+
+                        diag_html = (
+                            f"<div class='tds-ccr-caption'>현금흐름 진단 · {html.escape(str(ccr_diag))}</div>"
+                            if (ccr_diag and ccr_diag != "-")
+                            else ""
+                        )
+
+                        memo_preview_html = ""
+                        if in_uni and universe_store[sym].get("memo"):
+                            memo_preview_html = render_memo_with_links_html(universe_store[sym]["memo"])
+
+                        card_html = f"""
+                        <div class="{box_cls}">
+                            <div class="tds-card-top">
+                                <div>
+                                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                        <span class="tds-comp-name">{html.escape(name)}</span>
+                                        {badge_html}
+                                        {uni_star}
+                                    </div>
+                                    <div class="tds-comp-sub">{html.escape(sym)} · {html.escape(str(mkt_d))} · 최근 결산 {html.escape(str(fdate))}</div>
+                                </div>
+                                <div>
+                                    <div class="tds-mcap-text">{html.escape(str(mcap))}</div>
+                                </div>
+                            </div>
+                            <div class="tds-val-banner blue-tint">
+                                <div>
+                                    <div class="tds-val-lbl">영구 역DCF 기대성장률 (r={required_return_r:.0f}%)</div>
+                                    <div class="tds-val-main accent">{g_text}</div>
+                                    <div class="tds-val-sub">{g_5y_text}</div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <div class="tds-val-lbl">정상화 FCF 수익률</div>
+                                    <div class="tds-val-main" style="font-size:1.12rem;">{fcf_text}</div>
+                                    <div class="tds-val-sub">{fcf_5y_text}</div>
+                                </div>
+                            </div>
+                            <div class="tds-metric-grid">
+                                <div class="tds-metric-cell {gpm_miss}">
+                                    <div class="tds-m-lbl">매출총이익률 GPM</div>
+                                    <div class="tds-m-val">{gpm_str}</div>
+                                    <div class="tds-m-avg">{gpm_5y_str}</div>
+                                </div>
+                                <div class="tds-metric-cell {roce_miss}">
+                                    <div class="tds-m-lbl">자본이익률 ROCE</div>
+                                    <div class="tds-m-val">{roce_str}</div>
+                                    <div class="tds-m-avg">{roce_5y_str}</div>
+                                </div>
+                                <div class="tds-metric-cell {ccr_miss}">
+                                    <div class="tds-m-lbl">현금전환율 CCR</div>
+                                    <div class="tds-m-val">{ccr_str}</div>
+                                    <div class="tds-m-avg">{ccr_5y_str}</div>
+                                </div>
+                                <div class="tds-metric-cell {icr_miss}">
+                                    <div class="tds-m-lbl">이자보상 · OPM</div>
+                                    <div class="tds-m-val" style="font-size:0.92rem;">{html.escape(str(int_cov))}</div>
+                                    <div class="tds-m-avg">{html.escape(opm_5y_str)}</div>
+                                </div>
+                            </div>
+                            {diag_html}
+                            {memo_preview_html}
+                        </div>
+                        """
+                        render_raw_html(card_html)
+
+                        btn_c1, btn_c2 = st.columns([3.1, 1.4])
+                        with btn_c1:
+                            if st.button("상세 분석 보기 ›", key=f"btn_detail_{sym}_{c_idx}", type="primary", use_container_width=True):
+                                open_company_detail(sym, return_tab="screener")
                                 st.rerun()
+                        with btn_c2:
+                            if in_uni:
+                                if st.button("⭐ 보관 해제", key=f"btn_uni_{sym}_{c_idx}", type="secondary", use_container_width=True):
+                                    de.remove_universe_item(sym)
+                                    st.toast(f"🗑️ {name} 유니버스 해제")
+                                    st.rerun()
+                            else:
+                                if st.button("⭐ 유니버스 보관", key=f"btn_uni_{sym}_{c_idx}", type="secondary", use_container_width=True):
+                                    de.upsert_universe_item(symbol=sym, name=name, market=mkt_code)
+                                    st.toast(f"⭐ {name} 유니버스 보관 완료!")
+                                    st.rerun()
         else:
             with st.container(border=True):
                 st.caption("👉 **기업 행을 클릭**하면 즉시 해당 기업의 상세 페이지로 이동합니다.")
@@ -2072,116 +2067,117 @@ with tab_universe:
                 u_cols = st.columns(2)
                 for u_idx, row in uni_df.iterrows():
                     with u_cols[u_idx % 2]:
-                        sym = row["symbol"]
-                        name = row["name"]
-                        mkt_code = str(row["market"]).upper()
-                        mkt_d = row.get("market_display", row["market"])
-                        mcap_str = row.get("시가총액_표시", "N/A")
-                        yr_cnt = int(row.get("평균_연도수", 1))
-                        u_item = universe_store.get(sym, {})
+                        with st.container(border=True):
+                            sym = row["symbol"]
+                            name = row["name"]
+                            mkt_code = str(row["market"]).upper()
+                            mkt_d = row.get("market_display", row["market"])
+                            mcap_str = row.get("시가총액_표시", "N/A")
+                            yr_cnt = int(row.get("평균_연도수", 1))
+                            u_item = universe_store.get(sym, {})
 
-                        gpm_now, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
-                        roce_now, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
-                        ccr_now, ccr_5y = row.get("CCR (%)", np.nan), row.get("CCR_5Y (%)", np.nan)
-                        fcf_y_now = row.get("정상화 FCF 수익률 (%)", np.nan)
-                        fcf_y_5y = row.get("정상화 FCF 수익률_5Y (%)", np.nan)
-                        g_inf = row.get("역DCF 기대성장률 (%)", np.nan)
-                        g_imp_n = row.get("N년_정밀역DCF_요구성장률(%)", np.nan)
-                        n_yr_cur = int(row["성장기간(N년)"])
-                        g1_cur = float(row["예상성장률_g1(%)"])
-                        g2_cur = float(row["이후성장률_g2(%)"])
-                        fair_mcap_s = row["적정시가총액"]
-                        upside_v = row.get("상승여력(%)", np.nan)
-                        fcf_cagr_s = str(row.get("FCF_CAGR_표시", "N/A"))
+                            gpm_now, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
+                            roce_now, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
+                            ccr_now, ccr_5y = row.get("CCR (%)", np.nan), row.get("CCR_5Y (%)", np.nan)
+                            fcf_y_now = row.get("정상화 FCF 수익률 (%)", np.nan)
+                            fcf_y_5y = row.get("정상화 FCF 수익률_5Y (%)", np.nan)
+                            g_inf = row.get("역DCF 기대성장률 (%)", np.nan)
+                            g_imp_n = row.get("N년_정밀역DCF_요구성장률(%)", np.nan)
+                            n_yr_cur = int(row["성장기간(N년)"])
+                            g1_cur = float(row["예상성장률_g1(%)"])
+                            g2_cur = float(row["이후성장률_g2(%)"])
+                            fair_mcap_s = row["적정시가총액"]
+                            upside_v = row.get("상승여력(%)", np.nan)
+                            fcf_cagr_s = str(row.get("FCF_CAGR_표시", "N/A"))
 
-                        def _fp(v: float) -> str:
-                            return f"{v:.1f}%" if pd.notna(v) else "N/A"
+                            def _fp(v: float) -> str:
+                                return f"{v:.1f}%" if pd.notna(v) else "N/A"
 
-                        g_inf_s = f"{g_inf:+.1f}%" if pd.notna(g_inf) else "N/A"
-                        g_imp_n_s = f"연 {g_imp_n:+.1f}%" if pd.notna(g_imp_n) else "FCF≤0"
-                        upside_s = f"{upside_v:+.1f}%" if pd.notna(upside_v) else "N/A"
-                        upside_badge_cls = "green" if (pd.notna(upside_v) and upside_v >= 0) else "red"
-                        cur_memo_str = u_item.get("memo", "")
-                        memo_block_html = render_memo_with_links_html(cur_memo_str)
+                            g_inf_s = f"{g_inf:+.1f}%" if pd.notna(g_inf) else "N/A"
+                            g_imp_n_s = f"연 {g_imp_n:+.1f}%" if pd.notna(g_imp_n) else "FCF≤0"
+                            upside_s = f"{upside_v:+.1f}%" if pd.notna(upside_v) else "N/A"
+                            upside_badge_cls = "green" if (pd.notna(upside_v) and upside_v >= 0) else "red"
+                            cur_memo_str = u_item.get("memo", "")
+                            memo_block_html = render_memo_with_links_html(cur_memo_str)
 
-                        u_card_html = f"""
-                        <div class="tds-card in-universe">
-                            <div class="tds-card-top">
-                                <div>
-                                    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                        <span class="tds-comp-name">⭐ {html.escape(name)}</span>
-                                        <span class="tds-badge blue">성장기간 {n_yr_cur}년</span>
-                                        <span class="tds-badge {upside_badge_cls}">적정시총 대비 {upside_s}</span>
+                            u_card_html = f"""
+                            <div class="tds-card in-universe">
+                                <div class="tds-card-top">
+                                    <div>
+                                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                            <span class="tds-comp-name">⭐ {html.escape(name)}</span>
+                                            <span class="tds-badge blue">성장기간 {n_yr_cur}년</span>
+                                            <span class="tds-badge {upside_badge_cls}">적정시총 대비 {upside_s}</span>
+                                        </div>
+                                        <div class="tds-comp-sub">{html.escape(sym)} · {html.escape(str(mkt_d))} · FCF 성장 {html.escape(fcf_cagr_s)}</div>
                                     </div>
-                                    <div class="tds-comp-sub">{html.escape(sym)} · {html.escape(str(mkt_d))} · 과거 FCF 성장 {html.escape(fcf_cagr_s)}</div>
+                                    <div>
+                                        <div class="tds-mcap-text">{html.escape(str(mcap_str))}</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div class="tds-mcap-text">{html.escape(str(mcap_str))}</div>
+                                <div class="tds-val-banner blue-tint">
+                                    <div>
+                                        <div class="tds-val-lbl">{n_yr_cur}년 한정 정밀 역DCF 요구성장률 (이후 {g2_cur:.1f}%)</div>
+                                        <div class="tds-val-main accent">{g_imp_n_s} <span style="font-size:0.78rem; font-weight:600; color:#6B7684;">(영구 {g_inf_s})</span></div>
+                                        <div class="tds-val-sub">현재 FCF수익률 {_fp(fcf_y_now)} · 최근 포함 {yr_cnt}년 평균 {_fp(fcf_y_5y)}</div>
+                                    </div>
+                                    <div style="text-align:right;">
+                                        <div class="tds-val-lbl">내 예상(연 {g1_cur:+.1f}%) 적정 시총</div>
+                                        <div class="tds-val-main" style="font-size:1.08rem; color:#00A84D;">{fair_mcap_s}</div>
+                                        <div class="tds-val-sub">괴리율 {upside_s}</div>
+                                    </div>
                                 </div>
+                                <div class="tds-metric-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                    <div class="tds-metric-cell">
+                                        <div class="tds-m-lbl">매출총이익률 GPM</div>
+                                        <div class="tds-m-val">{_fp(gpm_now)}</div>
+                                        <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(gpm_5y)}</div>
+                                    </div>
+                                    <div class="tds-metric-cell">
+                                        <div class="tds-m-lbl">자본이익률 ROCE</div>
+                                        <div class="tds-m-val">{_fp(roce_now)}</div>
+                                        <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(roce_5y)}</div>
+                                    </div>
+                                    <div class="tds-metric-cell">
+                                        <div class="tds-m-lbl">현금전환율 CCR</div>
+                                        <div class="tds-m-val">{_fp(ccr_now)}</div>
+                                        <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(ccr_5y)}</div>
+                                    </div>
+                                </div>
+                                {memo_block_html}
                             </div>
-                            <div class="tds-val-banner blue-tint">
-                                <div>
-                                    <div class="tds-val-lbl">{n_yr_cur}년 한정 정밀 역DCF 요구성장률 (이후 {g2_cur:.1f}%)</div>
-                                    <div class="tds-val-main accent">{g_imp_n_s} <span style="font-size:0.78rem; font-weight:600; color:#6B7684;">(영구 {g_inf_s})</span></div>
-                                    <div class="tds-val-sub">현재 FCF수익률 {_fp(fcf_y_now)} · 당시시총 평균 {_fp(fcf_y_5y)}</div>
-                                </div>
-                                <div style="text-align:right;">
-                                    <div class="tds-val-lbl">내 예상(연 {g1_cur:+.1f}%) 적정 시총</div>
-                                    <div class="tds-val-main" style="font-size:1.08rem; color:#00A84D;">{fair_mcap_s}</div>
-                                    <div class="tds-val-sub">괴리율 {upside_s}</div>
-                                </div>
-                            </div>
-                            <div class="tds-metric-grid" style="grid-template-columns: repeat(3, 1fr);">
-                                <div class="tds-metric-cell">
-                                    <div class="tds-m-lbl">매출총이익률 GPM</div>
-                                    <div class="tds-m-val">{_fp(gpm_now)}</div>
-                                    <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(gpm_5y)}</div>
-                                </div>
-                                <div class="tds-metric-cell">
-                                    <div class="tds-m-lbl">자본이익률 ROCE</div>
-                                    <div class="tds-m-val">{_fp(roce_now)}</div>
-                                    <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(roce_5y)}</div>
-                                </div>
-                                <div class="tds-metric-cell">
-                                    <div class="tds-m-lbl">현금전환율 CCR</div>
-                                    <div class="tds-m-val">{_fp(ccr_now)}</div>
-                                    <div class="tds-m-avg">{yr_cnt}년 평균 {_fp(ccr_5y)}</div>
-                                </div>
-                            </div>
-                            {memo_block_html}
-                        </div>
-                        """
-                        render_raw_html(u_card_html)
+                            """
+                            render_raw_html(u_card_html)
 
-                        ub1, ub2, ub3 = st.columns([2.4, 1.4, 1.0])
-                        with ub1:
-                            if st.button(f"{name} 상세 페이지", key=f"uni_open_detail_{sym}", type="primary", use_container_width=True):
-                                open_company_detail(sym, return_tab="universe")
-                                st.rerun()
-                        with ub2:
-                            with st.popover("⚙️ 가정 · 메모 수정", use_container_width=True):
-                                st.markdown(f"**{name} 성장가정 & 메모**")
-                                edit_n = st.number_input("성장 지속기간 N (년)", min_value=1, max_value=40, value=n_yr_cur, step=1, key=f"u_n_{sym}")
-                                edit_g1 = st.number_input("성장기간 예상 성장률 g1 (%)", min_value=-30.0, max_value=100.0, value=g1_cur, step=1.0, key=f"u_g1_{sym}")
-                                edit_g2 = st.number_input("N년 이후 영구성장률 g2 (%)", min_value=-10.0, max_value=float(required_return_r - 0.5), value=g2_cur, step=0.5, key=f"u_g2_{sym}")
-                                edit_memo = st.text_area("메모 & 구글 독스 URL", value=cur_memo_str, height=85, key=f"u_memo_{sym}")
-                                if st.button("💾 저장하기", key=f"u_save_{sym}", type="primary", use_container_width=True):
-                                    de.upsert_universe_item(
-                                        symbol=sym,
-                                        name=name,
-                                        market=mkt_code,
-                                        memo=edit_memo,
-                                        growth_years=int(edit_n),
-                                        growth_rate_est=float(edit_g1),
-                                        terminal_growth_rate=float(edit_g2),
-                                    )
-                                    st.toast(f"✅ {name} 저장 완료!")
+                            ub1, ub2, ub3 = st.columns([2.3, 1.5, 1.0])
+                            with ub1:
+                                if st.button("상세 분석 보기 ›", key=f"uni_open_detail_{sym}", type="primary", use_container_width=True):
+                                    open_company_detail(sym, return_tab="universe")
                                     st.rerun()
-                        with ub3:
-                            if st.button("제거", key=f"uni_del_{sym}", type="secondary", use_container_width=True):
-                                de.remove_universe_item(sym)
-                                st.toast(f"🗑️ {name} 제거 완료")
-                                st.rerun()
+                            with ub2:
+                                with st.popover("⚙️ 가정 · 메모", use_container_width=True):
+                                    st.markdown(f"**{name} 성장가정 & 메모**")
+                                    edit_n = st.number_input("성장 지속기간 N (년)", min_value=1, max_value=40, value=n_yr_cur, step=1, key=f"u_n_{sym}")
+                                    edit_g1 = st.number_input("성장기간 예상 성장률 g1 (%)", min_value=-30.0, max_value=100.0, value=g1_cur, step=1.0, key=f"u_g1_{sym}")
+                                    edit_g2 = st.number_input("N년 이후 영구성장률 g2 (%)", min_value=-10.0, max_value=float(required_return_r - 0.5), value=g2_cur, step=0.5, key=f"u_g2_{sym}")
+                                    edit_memo = st.text_area("메모 & 구글 독스 URL", value=cur_memo_str, height=85, key=f"u_memo_{sym}")
+                                    if st.button("💾 저장하기", key=f"u_save_{sym}", type="primary", use_container_width=True):
+                                        de.upsert_universe_item(
+                                            symbol=sym,
+                                            name=name,
+                                            market=mkt_code,
+                                            memo=edit_memo,
+                                            growth_years=int(edit_n),
+                                            growth_rate_est=float(edit_g1),
+                                            terminal_growth_rate=float(edit_g2),
+                                        )
+                                        st.toast(f"✅ {name} 저장 완료!")
+                                        st.rerun()
+                            with ub3:
+                                if st.button("제거", key=f"uni_del_{sym}", type="secondary", use_container_width=True):
+                                    de.remove_universe_item(sym)
+                                    st.toast(f"🗑️ {name} 제거 완료")
+                                    st.rerun()
             else:
                 with st.container(border=True):
                     st.caption("👉 **기업 행을 클릭**하면 해당 기업의 상세 페이지로 즉시 이동합니다.")
