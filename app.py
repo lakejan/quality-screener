@@ -15,12 +15,14 @@ import io
 import re
 from typing import Any, Dict, List, Optional
 
+import importlib
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 import data_engine as de
+importlib.reload(de)
 
 st.set_page_config(
     page_title="한·미 퀄리티 기업 스크리너 & 유니버스",
