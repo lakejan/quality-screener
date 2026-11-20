@@ -2,8 +2,9 @@
 """
 한·미 주식 퀄리티 스크리너 데이터 수집 및 지표 산출 엔진
 - 한국(KR) 및 미국(US) 상장사 유니버스 조회 (yfinance EquityQuery + KRX 한글 종목명 매핑)
-- 재무제표(손익계산서, 재무상태표, 현금흐름표) 최근 5개년(가용 전체 연도) 병렬 수집 및 로컬 Parquet 캐싱
-- 최근 결산 지표 및 5개년 평균 지표 동시 산출 (GPM, OPM, ROCE, EBIT Margin, 회전율, CCR, 이자보상배율, 정상화 FCF)
+- 재무제표(손익계산서, 재무상태표, 현금흐름표) 최근 5개년(가용 전체 연도) 및 각 결산일 당시 시가총액 병렬 수집
+- 최근 결산 지표 및 5개년 평균 지표 동시 산출 (각 연도 FCF 수익률은 해당 결산일 당시 시가총액 기준 산출)
+- 다개년 정상화 FCF 연평균 복리 성장률(FCF CAGR) 및 연도별 YoY 성장률 산출
 - 정밀 2단계(Two-Stage) 역DCF 및 DCF 내재가치 산출 엔진 (성장기간 N년, 성장기간 성장률 g1, 이후 영구성장률 g2)
 - 유니버스(Universe) 영구 보관함 및 기업별 메모/URL·성장가정 저장 관리 (data/universe_store.json)
 """
@@ -190,7 +191,7 @@ def fetch_universe_symbols(
 
 
 # =====================================================================
-# 3. 개별 종목 재무제표 원천 데이터 추출 (최신 결산 + 최근 5개년 히스토리 동시 수집)
+# 3. 개별 종목 재무제표 원천 데이터 추출 (최신 결산 + 최근 5개년 히스토리 & 결산 당시 시가총액)
 # =====================================================================
 def _get_first_valid(series: pd.Series, keys: List[str]) -> float:
     """Series에서 후보 키 목록 중 처음으로 존재하는 유효 숫자를 반환합니다."""
@@ -207,13 +208,37 @@ def _get_first_valid(series: pd.Series, keys: List[str]) -> float:
     return np.nan
 
 
+def _lookup_historical_price_near_date(hist_close: Optional[pd.Series], fiscal_date_str: str) -> float:
+    """월별/일별 주가 시계열에서 결산일(fiscal_date_str)과 가장 가까운 당시 종가를 반환합니다."""
+    if hist_close is None or hist_close.empty or not fiscal_date_str:
+        return np.nan
+    try:
+        target_ts = pd.Timestamp(fiscal_date_str)
+        idx = hist_close.index
+        if hasattr(idx, "tz") and idx.tz is not None:
+            idx_naive = idx.tz_localize(None)
+        else:
+            idx_naive = idx
+        diffs = np.abs((idx_naive - target_ts).total_seconds())
+        min_pos = int(np.argmin(diffs))
+        # 결산일 전후 90일 이내 데이터가 있을 때만 유효 주가로 인정
+        if diffs[min_pos] <= 90 * 86400:
+            val = float(hist_close.iloc[min_pos])
+            return val if val > 0 else np.nan
+    except Exception:
+        pass
+    return np.nan
+
+
 def _extract_year_record(
     col_name: Any,
     is_df: pd.DataFrame,
     bs_df: pd.DataFrame,
     cf_df: pd.DataFrame,
+    hist_close: Optional[pd.Series] = None,
+    fallback_shares: float = np.nan,
 ) -> Dict[str, Any]:
-    """단일 결산연도 컬럼에서 원천 재무 계정들을 추출합니다."""
+    """단일 결산연도 컬럼에서 원천 재무 계정 및 결산 당시 시가총액을 추출합니다."""
     is_col = is_df[col_name]
     bs_col = bs_df[col_name] if col_name in bs_df.columns else (bs_df.iloc[:, 0] if not bs_df.empty else pd.Series(dtype=float))
     cf_col = cf_df[col_name] if col_name in cf_df.columns else (cf_df.iloc[:, 0] if not cf_df.empty else pd.Series(dtype=float))
@@ -247,7 +272,7 @@ def _extract_year_record(
         interest_expense = abs(interest_expense)
     tax_provision = _get_first_valid(is_col, ["Tax Provision", "Income Tax Expense"])
 
-    # 2) 재무상태표
+    # 2) 재무상태표 및 발행주식수
     total_assets = _get_first_valid(bs_col, ["Total Assets"])
     current_liabilities = _get_first_valid(bs_col, ["Current Liabilities", "Total Current Liabilities"])
     cash_and_sti = _get_first_valid(
@@ -265,6 +290,19 @@ def _extract_year_record(
         bs_col, ["Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"]
     )
     total_debt = _get_first_valid(bs_col, ["Total Debt"])
+
+    shares_num = _get_first_valid(
+        bs_col, ["Ordinary Shares Number", "Share Issued"]
+    )
+    if pd.isna(shares_num) or shares_num <= 0:
+        shares_num = _get_first_valid(
+            is_col, ["Basic Average Shares", "Diluted Average Shares"]
+        )
+    if (pd.isna(shares_num) or shares_num <= 0) and pd.notna(fallback_shares) and fallback_shares > 0:
+        shares_num = fallback_shares
+
+    hist_price = _lookup_historical_price_near_date(hist_close, fiscal_date)
+    hist_market_cap = (hist_price * shares_num) if (pd.notna(hist_price) and pd.notna(shares_num) and shares_num > 0) else np.nan
 
     # 3) 현금흐름표
     ocf = _get_first_valid(
@@ -334,6 +372,9 @@ def _extract_year_record(
         "chg_receivables": chg_receivables,
         "chg_inventory": chg_inventory,
         "chg_deferred": chg_deferred,
+        "shares_num": shares_num,
+        "hist_price": hist_price,
+        "hist_market_cap": hist_market_cap,
     }
 
 
@@ -349,7 +390,7 @@ def _clean_for_json(val: Any) -> Any:
 
 def fetch_single_stock_raw(item: Dict[str, Any], max_years: int = 5) -> Optional[Dict[str, Any]]:
     """
-    단일 종목의 연간 재무제표(IS, BS, CF)에서 최신 결산 데이터와 최근 5개년(가용 연도) 히스토리를 한 번에 추출합니다.
+    단일 종목의 연간 재무제표(IS, BS, CF)에서 최신 결산 데이터와 최근 5개년 히스토리(각 결산일 당시 시가총액 포함)를 추출합니다.
     """
     sym = item["symbol"]
     try:
@@ -361,7 +402,6 @@ def fetch_single_stock_raw(item: Dict[str, Any], max_years: int = 5) -> Optional
         if is_df is None or is_df.empty or bs_df is None or bs_df.empty or cf_df is None or cf_df.empty:
             return None
 
-        # 매출액이 유효한 결산연도 컬럼들을 최신순으로 최대 max_years개 추출
         valid_cols = []
         for col_name in is_df.columns:
             cand = is_df[col_name]
@@ -374,9 +414,39 @@ def fetch_single_stock_raw(item: Dict[str, Any], max_years: int = 5) -> Optional
         if not valid_cols:
             return None
 
+        # 결산일 당시 시가총액 산출을 위해 최근 6년 월별 종가(무수정 주가) 조회
+        hist_close: Optional[pd.Series] = None
+        try:
+            hist_df = tk.history(period="6y", interval="1mo", auto_adjust=False)
+            if hist_df is not None and not hist_df.empty and "Close" in hist_df.columns:
+                hist_close = hist_df["Close"].dropna()
+        except Exception:
+            hist_close = None
+
+        mcap_val = item.get("market_cap", np.nan)
+        price_val = item.get("price", np.nan)
+        if pd.isna(mcap_val) or pd.isna(price_val):
+            try:
+                fi = tk.fast_info
+                if pd.isna(price_val):
+                    price_val = fi.get("lastPrice", np.nan)
+                if pd.isna(mcap_val):
+                    mcap_val = fi.get("marketCap", np.nan)
+            except Exception:
+                pass
+
+        fallback_shares = (float(mcap_val) / float(price_val)) if (pd.notna(mcap_val) and pd.notna(price_val) and float(price_val) > 0) else np.nan
+
         yearly_records = []
         for col_name in valid_cols:
-            rec = _extract_year_record(col_name, is_df, bs_df, cf_df)
+            rec = _extract_year_record(
+                col_name,
+                is_df,
+                bs_df,
+                cf_df,
+                hist_close=hist_close,
+                fallback_shares=fallback_shares,
+            )
             yearly_records.append(rec)
 
         latest = yearly_records[0]
@@ -390,18 +460,6 @@ def fetch_single_stock_raw(item: Dict[str, Any], max_years: int = 5) -> Optional
                     exch_val = str(tk.fast_info.get("exchange", ""))
                 except Exception:
                     exch_val = ""
-
-        mcap_val = item.get("market_cap", np.nan)
-        price_val = item.get("price", np.nan)
-        if pd.isna(mcap_val) or pd.isna(price_val):
-            try:
-                fi = tk.fast_info
-                if pd.isna(price_val):
-                    price_val = fi.get("lastPrice", np.nan)
-                if pd.isna(mcap_val):
-                    mcap_val = fi.get("marketCap", np.nan)
-            except Exception:
-                pass
 
         clean_history = [
             {k: _clean_for_json(v) for k, v in yr_rec.items()}
@@ -432,7 +490,7 @@ def fetch_batch_raw_financials(
     progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> pd.DataFrame:
     """
-    멀티스레딩으로 여러 기업의 원천 재무 데이터(최신 + 5개년 히스토리)를 병렬 수집하여 DataFrame으로 반환합니다.
+    멀티스레딩으로 여러 기업의 원천 재무 데이터(최신 + 5개년 히스토리 + 당시 시가총액)를 병렬 수집하여 DataFrame으로 반환합니다.
     """
     results: List[Dict[str, Any]] = []
     total = len(items)
@@ -463,9 +521,10 @@ def backfill_multiyear_history_for_cache(
     market: str = "ALL",
     max_workers: int = 12,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    force_all: bool = False,
 ) -> int:
     """
-    기존 로컬 캐시에 `history_json` (5개년 데이터)이 없는 종목들만 골라 다개년 재무제표를 보강 저장합니다.
+    기존 로컬 캐시에 `history_json` (5개년 데이터 및 당시 시가총액)이 없는 종목들을 다개년 재무제표로 보강 저장합니다.
     """
     target_markets = ["KR", "US"] if market.upper() == "ALL" else [market.upper()]
     updated_count = 0
@@ -475,13 +534,14 @@ def backfill_multiyear_history_for_cache(
         if df is None or df.empty:
             continue
 
-        needs_backfill = False
-        if "history_json" not in df.columns:
-            needs_backfill = True
-        else:
-            missing_mask = df["history_json"].isna() | (df["history_json"].astype(str).str.len() < 10)
-            if missing_mask.any():
+        needs_backfill = force_all
+        if not needs_backfill:
+            if "history_json" not in df.columns:
                 needs_backfill = True
+            else:
+                sample_str = str(df["history_json"].dropna().iloc[0]) if not df["history_json"].dropna().empty else ""
+                if len(sample_str) < 10 or "hist_market_cap" not in sample_str:
+                    needs_backfill = True
 
         if not needs_backfill:
             continue
@@ -500,8 +560,9 @@ def _compute_single_year_metrics_dict(
     ccr_denominator: str = "net_income",
     deduct_cash_from_ce: bool = False,
     allow_missing_gpm_as_opm: bool = False,
+    fallback_market_cap: float = np.nan,
 ) -> Dict[str, Any]:
-    """단일 연도 원천 딕셔너리에서 비율 지표들을 계산합니다."""
+    """단일 연도 원천 딕셔너리에서 비율 지표들과 결산 당시 시가총액 대비 FCF 수익률을 계산합니다."""
     revenue = rec.get("revenue", np.nan)
     revenue = float(revenue) if revenue is not None and pd.notna(revenue) else np.nan
     gross_profit = rec.get("gross_profit", np.nan)
@@ -545,6 +606,9 @@ def _compute_single_year_metrics_dict(
     chg_wc = rec.get("chg_wc", np.nan)
     chg_wc = float(chg_wc) if chg_wc is not None and pd.notna(chg_wc) else np.nan
 
+    hist_mcap = rec.get("hist_market_cap", np.nan)
+    hist_mcap = float(hist_mcap) if hist_mcap is not None and pd.notna(hist_mcap) and float(hist_mcap) > 0 else np.nan
+
     gpm = (gross_profit / revenue * 100.0) if (pd.notna(revenue) and revenue > 0 and pd.notna(gross_profit)) else np.nan
     opm = (ebit / revenue * 100.0) if (pd.notna(revenue) and revenue > 0 and pd.notna(ebit)) else np.nan
     ebit_margin = opm
@@ -553,6 +617,10 @@ def _compute_single_year_metrics_dict(
 
     fcf = ocf - capex if pd.notna(ocf) else np.nan
     norm_fcf = ocf - da if pd.notna(ocf) else np.nan
+
+    # 해당 연도 결산 당시 시가총액 대비 정상화 FCF 수익률 (%)
+    mcap_for_year = hist_mcap if pd.notna(hist_mcap) else fallback_market_cap
+    fcf_yield_hist = (norm_fcf / mcap_for_year * 100.0) if (pd.notna(norm_fcf) and pd.notna(mcap_for_year) and mcap_for_year > 0) else np.nan
 
     if ccr_denominator == "net_income":
         ccr = (fcf / net_income * 100.0) if (pd.notna(fcf) and pd.notna(net_income) and net_income > 0) else np.nan
@@ -596,6 +664,8 @@ def _compute_single_year_metrics_dict(
         "fcf": fcf,
         "norm_fcf": norm_fcf,
         "chg_wc": chg_wc,
+        "hist_market_cap": hist_mcap,
+        "당시시총_FCF수익률 (%)": fcf_yield_hist,
         "GPM (%)": gpm,
         "OPM (%)": opm,
         "ROCE (%)": roce,
@@ -609,6 +679,32 @@ def _compute_single_year_metrics_dict(
     }
 
 
+def compute_fcf_cagr_info(norm_fcf_series_chronological: List[float]) -> Tuple[float, str]:
+    """
+    시간순(과거 -> 최신)으로 정렬된 정상화 FCF 리스트로부터
+    다개년 연평균 복리 성장률(CAGR, %) 수치와 표시 문자열을 반환합니다.
+    """
+    valid_vals = [(idx, float(v)) for idx, v in enumerate(norm_fcf_series_chronological) if v is not None and pd.notna(v)]
+    if len(valid_vals) < 2:
+        return np.nan, "N/A (데이터 부족)"
+
+    first_idx, first_val = valid_vals[0]
+    last_idx, last_val = valid_vals[-1]
+    n_intervals = last_idx - first_idx
+    if n_intervals <= 0:
+        return np.nan, "N/A"
+
+    if first_val > 0 and last_val > 0:
+        cagr = ((last_val / first_val) ** (1.0 / n_intervals) - 1.0) * 100.0
+        return cagr, f"{cagr:+.1f}% / 년 ({n_intervals}년간)"
+    elif first_val <= 0 and last_val > 0:
+        return np.nan, f"흑자전환 ({n_intervals}년 전 적자 ➔ 최신 흑자)"
+    elif first_val > 0 and last_val <= 0:
+        return np.nan, "적자전환 (최신 FCF 음수)"
+    else:
+        return np.nan, "지속 적자 (FCF 음수)"
+
+
 def fetch_stock_multiyear_data(
     symbol: str,
     market: str = "KR",
@@ -617,30 +713,70 @@ def fetch_stock_multiyear_data(
     allow_missing_gpm_as_opm: bool = False,
     max_years: int = 5,
     cached_history_json: Optional[str] = None,
+    current_market_cap: float = np.nan,
+    current_price: float = np.nan,
 ) -> pd.DataFrame:
     """
-    개별 기업의 최근 4~5개년 연간 재무제표를 바탕으로 연도별 지표 추이를 반환합니다.
-    로컬 캐시에 `history_json`이 있으면 네트워크 호출 없이 0초 만에 즉시 변환합니다.
+    개별 기업의 최근 4~5개년 연간 재무제표를 바탕으로 연도별 지표 추이(결산 당시 시가총액 및 FCF 성장률 포함)를 반환합니다.
     """
+    raw_list: Optional[List[Dict[str, Any]]] = None
     if cached_history_json and isinstance(cached_history_json, str) and len(cached_history_json) > 10:
         try:
-            raw_list = json.loads(cached_history_json)
-            if isinstance(raw_list, list) and len(raw_list) > 0:
-                records = [
-                    _compute_single_year_metrics_dict(
-                        rec,
-                        ccr_denominator=ccr_denominator,
-                        deduct_cash_from_ce=deduct_cash_from_ce,
-                        allow_missing_gpm_as_opm=allow_missing_gpm_as_opm,
-                    )
-                    for rec in raw_list[:max_years]
-                ]
-                df_out = pd.DataFrame(records)
-                if not df_out.empty and "fiscal_date" in df_out.columns:
-                    df_out = df_out.sort_values(by="fiscal_date", ascending=True).reset_index(drop=True)
-                return df_out
+            parsed = json.loads(cached_history_json)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                raw_list = parsed[:max_years]
         except Exception:
-            pass
+            raw_list = None
+
+    # 만약 캐시된 히스토리에 결산 당시 시가총액(`hist_market_cap`)이 비어 있다면 해당 종목만 월별 주가를 즉시 조회해 채움
+    if raw_list is not None:
+        has_hist_mcap = any(
+            r.get("hist_market_cap") is not None and pd.notna(r.get("hist_market_cap")) and float(r.get("hist_market_cap", 0)) > 0
+            for r in raw_list
+        )
+        if not has_hist_mcap:
+            try:
+                tk = yf.Ticker(symbol)
+                hist_df = tk.history(period="6y", interval="1mo", auto_adjust=False)
+                hist_close = hist_df["Close"].dropna() if (hist_df is not None and not hist_df.empty and "Close" in hist_df.columns) else None
+                fb_shares = (float(current_market_cap) / float(current_price)) if (pd.notna(current_market_cap) and pd.notna(current_price) and float(current_price) > 0) else np.nan
+                if pd.isna(fb_shares):
+                    bs_df = tk.balance_sheet
+                    if bs_df is not None and not bs_df.empty:
+                        fb_shares = _get_first_valid(bs_df.iloc[:, 0], ["Ordinary Shares Number", "Share Issued"])
+                for r in raw_list:
+                    sh = r.get("shares_num") or fb_shares
+                    hp = _lookup_historical_price_near_date(hist_close, str(r.get("fiscal_date", ""))[:10])
+                    if pd.notna(hp) and sh is not None and pd.notna(sh) and float(sh) > 0:
+                        r["hist_price"] = hp
+                        r["hist_market_cap"] = hp * float(sh)
+            except Exception:
+                pass
+
+        records = [
+            _compute_single_year_metrics_dict(
+                rec,
+                ccr_denominator=ccr_denominator,
+                deduct_cash_from_ce=deduct_cash_from_ce,
+                allow_missing_gpm_as_opm=allow_missing_gpm_as_opm,
+                fallback_market_cap=current_market_cap,
+            )
+            for rec in raw_list
+        ]
+        df_out = pd.DataFrame(records)
+        if not df_out.empty and "fiscal_date" in df_out.columns:
+            df_out = df_out.sort_values(by="fiscal_date", ascending=True).reset_index(drop=True)
+            # 전년 대비 정상화 FCF 성장률 (YoY %) 계산
+            yoy_list = [np.nan]
+            fcf_vals = df_out["norm_fcf"].tolist()
+            for i in range(1, len(fcf_vals)):
+                prev_v, cur_v = fcf_vals[i - 1], fcf_vals[i]
+                if pd.notna(prev_v) and pd.notna(cur_v) and prev_v > 0:
+                    yoy_list.append((cur_v / prev_v - 1.0) * 100.0)
+                else:
+                    yoy_list.append(np.nan)
+            df_out["정상화FCF_성장률_YoY (%)"] = yoy_list
+        return df_out
 
     try:
         tk = yf.Ticker(symbol)
@@ -662,20 +798,40 @@ def fetch_stock_multiyear_data(
         if not valid_cols:
             return pd.DataFrame()
 
+        hist_close = None
+        try:
+            hist_df = tk.history(period="6y", interval="1mo", auto_adjust=False)
+            if hist_df is not None and not hist_df.empty and "Close" in hist_df.columns:
+                hist_close = hist_df["Close"].dropna()
+        except Exception:
+            pass
+
+        fb_shares = (float(current_market_cap) / float(current_price)) if (pd.notna(current_market_cap) and pd.notna(current_price) and float(current_price) > 0) else np.nan
+
         records = []
         for col_name in valid_cols:
-            raw_rec = _extract_year_record(col_name, is_df, bs_df, cf_df)
+            raw_rec = _extract_year_record(col_name, is_df, bs_df, cf_df, hist_close=hist_close, fallback_shares=fb_shares)
             metrics_rec = _compute_single_year_metrics_dict(
                 raw_rec,
                 ccr_denominator=ccr_denominator,
                 deduct_cash_from_ce=deduct_cash_from_ce,
                 allow_missing_gpm_as_opm=allow_missing_gpm_as_opm,
+                fallback_market_cap=current_market_cap,
             )
             records.append(metrics_rec)
 
         df_out = pd.DataFrame(records)
         if not df_out.empty and "fiscal_date" in df_out.columns:
             df_out = df_out.sort_values(by="fiscal_date", ascending=True).reset_index(drop=True)
+            yoy_list = [np.nan]
+            fcf_vals = df_out["norm_fcf"].tolist()
+            for i in range(1, len(fcf_vals)):
+                prev_v, cur_v = fcf_vals[i - 1], fcf_vals[i]
+                if pd.notna(prev_v) and pd.notna(cur_v) and prev_v > 0:
+                    yoy_list.append((cur_v / prev_v - 1.0) * 100.0)
+                else:
+                    yoy_list.append(np.nan)
+            df_out["정상화FCF_성장률_YoY (%)"] = yoy_list
         return df_out
     except Exception:
         return pd.DataFrame()
@@ -716,7 +872,6 @@ def load_raw_cache(market: str) -> pd.DataFrame:
 def load_universe_store() -> Dict[str, Dict[str, Any]]:
     """
     유니버스 보관함(`data/universe_store.json`)을 로드합니다.
-    반환 형태: {symbol: {"symbol": ..., "name": ..., "market": ..., "memo": ..., "growth_years": 10, "growth_rate_est": 10.0, "terminal_growth_rate": 0.0, "added_at": ...}}
     """
     if UNIVERSE_STORE_PATH.exists():
         try:
@@ -865,17 +1020,6 @@ def calc_two_stage_dcf_value(
 ) -> Dict[str, float]:
     """
     [정밀 2단계 DCF 내재가치 계산]
-    - fcf0: 기준 정상화 FCF (= OCF - D&A)
-    - r_pct: 요구수익률(할인율) r (%)
-    - n_years: 1단계 성장 지속기간 N (년)
-    - g1_pct: 1단계(1~N년) 연평균 성장률 g1 (%)
-    - g2_pct: 2단계(N년 이후) 영구성장률 g2 (%) (기본 0%)
-
-    수식:
-      PV_1 (1~N년 현금흐름 현가합) = sum_{t=1..N} FCF0 * (1 + g1)^t / (1 + r)^t
-      TV_N (N년 시점 영구가치)    = FCF0 * (1 + g1)^N * (1 + g2) / (r - g2)
-      PV_2 (영구가치의 현재가치)  = TV_N / (1 + r)^N
-      총 내재가치(적정 시가총액)  = PV_1 + PV_2
     """
     if pd.isna(fcf0) or fcf0 <= 0 or pd.isna(r_pct) or r_pct <= g2_pct:
         return {
@@ -919,9 +1063,6 @@ def solve_two_stage_implied_growth(
 ) -> float:
     """
     [정밀 2단계 역DCF 내포 기대성장률(g1) 역산]
-    현재 시가총액(market_cap)과 정상화 FCF(fcf0)가 주어졌을 때,
-    향후 n_years년 동안 매년 몇 %(g1)로 성장하고 이후 g2_pct(%)로 영구 성장해야
-    현재 시가총액이 정확히 정당화되는지 이진 탐색(Bisection)으로 정밀 역산합니다.
     """
     if pd.isna(fcf0) or fcf0 <= 0 or pd.isna(market_cap) or market_cap <= 0:
         return np.nan
@@ -946,7 +1087,7 @@ def solve_two_stage_implied_growth(
 
 
 # =====================================================================
-# 6. 지표 계산 및 CCR / ROCE 해석 엔진 (최근 지표 + 5개년 평균 지표 동시 산출)
+# 6. 지표 계산 및 CCR / ROCE 해석 엔진 (최근 지표 + 당시 시총 기반 5개년 평균 지표)
 # =====================================================================
 def _diagnose_ccr_row(row: pd.Series) -> str:
     """
@@ -1001,9 +1142,13 @@ def _compute_5y_averages_from_history(
     allow_missing_gpm_as_opm: bool,
 ) -> Dict[str, Any]:
     """
-    행의 `history_json`을 파싱하여 현재 옵션(현금차감 여부, CCR 산식 등)에 맞는 5개년(가용 연도) 평균 지표를 산출합니다.
-    만약 `history_json`이 없는 구버전 캐시라면 최신 결산 수치로 폴백합니다.
+    행의 `history_json`을 파싱하여:
+    - 4~5개년 평균 GPM, OPM, ROCE, CCR
+    - 각 결산일 당시 시가총액 대비 FCF 수익률(`당시시총_FCF수익률 (%)`)의 4~5개년 평균
+    - 4~5개년 정상화 FCF 연평균 복리 성장률(CAGR, %)
+    을 계산합니다.
     """
+    cur_mcap = row.get("market_cap", np.nan)
     hist_str = row.get("history_json", None)
     if hist_str and isinstance(hist_str, str) and len(hist_str) > 10:
         try:
@@ -1015,10 +1160,18 @@ def _compute_5y_averages_from_history(
                         ccr_denominator=ccr_denominator,
                         deduct_cash_from_ce=deduct_cash_from_ce,
                         allow_missing_gpm_as_opm=allow_missing_gpm_as_opm,
+                        fallback_market_cap=cur_mcap,
                     )
                     for rec in raw_list
                 ]
                 mdf = pd.DataFrame(yr_metrics)
+                # 시간순 정렬(과거 -> 최신) 후 FCF CAGR 계산
+                mdf_sorted = mdf.sort_values(by="fiscal_date", ascending=True).reset_index(drop=True)
+                fcf_cagr_num, fcf_cagr_str = compute_fcf_cagr_info(mdf_sorted["norm_fcf"].tolist())
+
+                # 각 연도 결산 당시 시가총액 대비 FCF 수익률의 평균
+                hist_fcf_yield_avg = mdf["당시시총_FCF수익률 (%)"].mean(skipna=True)
+
                 return {
                     "평균_연도수": len(mdf),
                     "GPM_5Y (%)": mdf["GPM (%)"].mean(skipna=True),
@@ -1029,6 +1182,9 @@ def _compute_5y_averages_from_history(
                     "CCR_5Y (%)": mdf["CCR (%)"].mean(skipna=True),
                     "CapEx/감가상각비_5Y (%)": mdf["CapEx/감가상각비 (%)"].mean(skipna=True),
                     "norm_fcf_5y": mdf["norm_fcf"].mean(skipna=True),
+                    "정상화 FCF 수익률_5Y (%)": hist_fcf_yield_avg,
+                    "FCF_CAGR_5Y (%)": fcf_cagr_num,
+                    "FCF_CAGR_표시": fcf_cagr_str,
                 }
         except Exception:
             pass
@@ -1043,6 +1199,9 @@ def _compute_5y_averages_from_history(
         "CCR_5Y (%)": row.get("CCR (%)", np.nan),
         "CapEx/감가상각비_5Y (%)": row.get("CapEx/감가상각비 (%)", np.nan),
         "norm_fcf_5y": row.get("norm_fcf", np.nan),
+        "정상화 FCF 수익률_5Y (%)": row.get("정상화 FCF 수익률 (%)", np.nan),
+        "FCF_CAGR_5Y (%)": np.nan,
+        "FCF_CAGR_표시": "N/A",
     }
 
 
@@ -1169,14 +1328,14 @@ def compute_quality_metrics(
     df["시가총액_표시"] = mcap_display
     df["시가총액_단위수치"] = mcap_unit_num
 
-    # 7. 정상화 FCF (OCF - 감가상각비) 기반 FCF 수익률 및 영구 역DCF 기대성장률
+    # 7. 현재 시가총액 기준 정상화 FCF 수익률 및 영구 역DCF 기대성장률
     norm_fcf = df["ocf"] - df["da"].fillna(0.0)
     df["norm_fcf"] = norm_fcf
     mcap_valid = df["market_cap"].where(df["market_cap"] > 0, np.nan)
     df["정상화 FCF 수익률 (%)"] = (norm_fcf / mcap_valid) * 100.0
     df["역DCF 기대성장률 (%)"] = float(required_return_pct) - df["정상화 FCF 수익률 (%)"]
 
-    # 8. 5개년(가용 연도) 평균 지표 일괄 산출
+    # 8. 5개년(가용 연도) 평균 지표 (각 결산일 당시 시가총액 대비 FCF 수익률 평균 & FCF CAGR 포함)
     avg_rows = [
         _compute_5y_averages_from_history(
             row,
@@ -1190,7 +1349,6 @@ def compute_quality_metrics(
     for col in avg_df.columns:
         df[col] = avg_df[col]
 
-    df["정상화 FCF 수익률_5Y (%)"] = (df["norm_fcf_5y"] / mcap_valid) * 100.0
     df["역DCF 기대성장률_5Y (%)"] = float(required_return_pct) - df["정상화 FCF 수익률_5Y (%)"]
 
     # 9. CCR 자동 진단 코멘트 생성
