@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 한·미 퀄리티 주식 스크리너 & 유니버스 보관함 (Streamlit UI)
-- 테리 스미스 / 퀄리티 투자 프레임워크 기반 필터링 (최근 결산 수치 + 5개년 평균 수치 동시 조회 및 기준 전환)
-- 유니버스(Universe) 영구 보관함: 관심 기업 별도 보관, 메모 & 웹 URL(구글 독스 등) 연결, 기업별 맞춤 성장기간(N년) 역DCF 계산
-- 정밀 2단계(Two-Stage) 역DCF & DCF 내재가치 엔진:
-  1) 영구 성장 역DCF: g_inf = r - FCF Yield
-  2) N년 성장 후 성숙기(이후 성장률 g2, 말기 FCF 수익률 = r - g2로 밸류에이션 하락) 가정 시 정밀 역DCF 요구성장률(g_implied)
-  3) 사용자 지정 성장기간(N년) · 성장기간 성장률(g1) · 이후 성장률(g2) 기반 적정 시가총액 및 안전마진 산출
+- 테리 스미스 / 퀄리티 투자 프레임워크 기반 통합 스크리너 (통과 리스트 + 전체 매트릭스 + 특정 지표 무시 What-If 분석 통합)
+- 최근 결산 수치 + 4~5개년 평균 수치 동시 조회 및 평가 기준 즉시 전환
+- 유니버스(Universe) 영구 보관함: 관심 기업 별도 보관, 메모 & 웹 URL(구글 독스 등) 연결, 기업별 맞춤 성장기간(N년) 정밀 2단계 역DCF 계산
 - 카드 또는 테이블 행 클릭 시 해당 기업의 [🏢 기업 심층 상세 페이지]로 즉시 화면 전환
 """
 
@@ -103,12 +100,12 @@ def inject_custom_css() -> None:
             word-break: keep-all !important;
         }
 
-        /* 3. 모바일 화면 최상단/좌우 여백 컴팩트화 */
+        /* 3. 화면 최상단 헤더 바에 버튼/제목이 잘리지 않도록 충분한 상단 여백(3.8rem) 확보 */
         .block-container {
-            padding-top: 1.5rem !important;
-            padding-bottom: 2rem !important;
-            padding-left: 0.8rem !important;
-            padding-right: 0.8rem !important;
+            padding-top: 3.8rem !important;
+            padding-bottom: 2.5rem !important;
+            padding-left: 1.0rem !important;
+            padding-right: 1.0rem !important;
             max-width: 100% !important;
         }
 
@@ -129,14 +126,15 @@ def inject_custom_css() -> None:
 
         /* 5. 탭(Tabs) 모바일 가로 스크롤 및 컴팩트 폰트 */
         div[data-baseweb="tab-list"] {
-            gap: 4px !important;
+            gap: 6px !important;
             overflow-x: auto !important;
             flex-wrap: nowrap !important;
             scrollbar-width: thin;
         }
         button[data-baseweb="tab"] {
-            padding: 6px 12px !important;
-            font-size: 0.85rem !important;
+            padding: 8px 16px !important;
+            font-size: 0.92rem !important;
+            font-weight: 700 !important;
             white-space: nowrap !important;
         }
 
@@ -265,6 +263,33 @@ def inject_custom_css() -> None:
         .memo-url-chip:hover {
             background: #dbeafe;
         }
+        .pass-badge-ok {
+            display: inline-block;
+            background: #dcfce7;
+            color: #166534;
+            font-size: 0.73rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .pass-badge-warn {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.73rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .pass-badge-fail {
+            display: inline-block;
+            background: #fee2e2;
+            color: #991b1b;
+            font-size: 0.73rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -340,8 +365,7 @@ def open_company_detail(symbol: str, return_tab: str = "screener") -> None:
     st.session_state["selected_symbol"] = symbol
     st.session_state["detail_view_symbol"] = symbol
     st.session_state["detail_return_tab"] = return_tab
-    st.session_state["clear_passed_selection"] = True
-    st.session_state["clear_matrix_selection"] = True
+    st.session_state["clear_screener_selection"] = True
     st.session_state["clear_universe_selection"] = True
 
 
@@ -356,8 +380,8 @@ def close_company_detail() -> None:
 METRIC_DEFINITIONS: Dict[str, Dict[str, str]] = {
     "GPM (%)": {
         "title": "🎯 매출총이익률 (GPM, Gross Profit Margin)",
-        "formula": "(매출총이익 / 매출액) × 100\n• 5년 평균: 최근 가용 4~5개년 GPM의 산술평균",
-        "desc": "원가 경쟁력과 가격 결정력(Pricing Power)의 1차 방어선. 최근 수치와 5년 평균을 함께 보아 일시적 호황인지 구조적 해자인지 판별합니다.",
+        "formula": "(매출총이익 / 매출액) × 100\n• 다개년 평균: 최근 가용 4~5개년 GPM의 산술평균",
+        "desc": "원가 경쟁력과 가격 결정력(Pricing Power)의 1차 방어선. 최근 수치와 4~5년 평균을 함께 보아 일시적 호황인지 구조적 해자인지 판별합니다.",
         "icon": "🎯",
     },
     "OPM (%)": {
@@ -421,15 +445,15 @@ METRIC_DEFINITIONS: Dict[str, Dict[str, str]] = {
         "icon": "📎",
     },
     "정상화 FCF 수익률 (%)": {
-        "title": "📎 정상화 FCF 수익률 (Normalized FCF Yield)",
-        "formula": "(정상화 FCF / 시가총액) × 100\n• 정상화 FCF = 영업현금흐름(OCF) - 감가상각비(D&A)",
-        "desc": "현재 시가총액 대비 정상화 주주이익의 비율로, 채권의 쿠폰 수익률에 대응하는 밸류에이션 지표입니다.",
+        "title": "📎 정상화 FCF 수익률 (현재 시가총액 기준)",
+        "formula": "• 최근 FCF 수익률 = (최근 결산 정상화 FCF / 현재 시가총액) × 100\n• 다개년 평균 FCF 수익률 = (과거 4~5개년 평균 정상화 FCF / 현재 시가총액) × 100",
+        "desc": "분모는 둘 다 '오늘의 시가총액(현재 주가)'입니다. 최근 1년치 FCF가 일시적으로 튀거나 꺾였을 때의 착시를 막기 위해, 회사의 4~5년 평균 현금창출력을 오늘의 시가총액과 비교한 값도 함께 제공합니다.",
         "icon": "📎",
     },
     "역DCF 기대성장률 (%)": {
         "title": "🔥 역DCF 내포 기대성장률 (영구성장 g_∞ & N년 한정 정밀 역DCF g_N)",
-        "formula": "① 영구성장 역DCF: g_∞ = 요구수익률(r) - 정상화 FCF 수익률\n② N년 성장 정밀 역DCF (유니버스/상세페이지): P = Σ_{t=1..N} FCF0·(1+g1)^t/(1+r)^t + [FCF0·(1+g1)^N·(1+g2)/(r-g2)]/(1+r)^N 을 만족하는 g1 역산",
-        "desc": "영구성장(g_∞)은 현재 멀티플이 영원히 유지된다는 가정이며, N년 정밀 역DCF(g_N)는 N년 뒤 성장이 둔화(g2)되어 멀티플이 낮아질 때(말기 FCF 수익률 = r - g2) 현재 주가를 정당화하기 위해 향후 N년간 달성해야 하는 실질 요구 성장률입니다.",
+        "formula": "① 영구성장 역DCF: g_∞ = 요구수익률(r) - 현재시총 대비 FCF 수익률\n② N년 성장 정밀 역DCF (유니버스/상세페이지): P = Σ_{t=1..N} FCF0·(1+g1)^t/(1+r)^t + [FCF0·(1+g1)^N·(1+g2)/(r-g2)]/(1+r)^N 을 만족하는 g1 역산",
+        "desc": "현재 시가총액을 정당화하기 위해 시장이 요구하는 연평균 성장률입니다. 4~5년 평균 FCF 기준 역DCF도 분모는 '현재 시가총액'이며, 분자만 '4~5년 평균 FCF'를 넣은 값입니다.",
         "icon": "🔥",
     },
 }
@@ -446,12 +470,12 @@ def get_metric_tooltip(metric_key: str) -> str:
 def render_hover_chips_guide() -> None:
     """마우스를 올리면(호버) 지표 계산 공식과 설명이 풍선처럼 나타나는 퀵 가이드 칩 바"""
     key_metrics = [
-        ("GPM (%)", "🎯 GPM (최근/5년평균) ⓘ"),
-        ("ROCE (%)", "🎯 ROCE (최근/5년평균) ⓘ"),
-        ("CCR (%)", "🎯 CCR (최근/5년평균) ⓘ"),
+        ("GPM (%)", "🎯 GPM (최근/평균) ⓘ"),
+        ("ROCE (%)", "🎯 ROCE (최근/평균) ⓘ"),
+        ("CCR (%)", "🎯 CCR (최근/평균) ⓘ"),
         ("이자보상배율", "🎯 이자보상배율 ⓘ"),
-        ("역DCF 기대성장률 (%)", "🔥 역DCF (영구 vs N년 정밀) ⓘ"),
-        ("정상화 FCF 수익률 (%)", "📎 FCF 수익률 ⓘ"),
+        ("역DCF 기대성장률 (%)", "🔥 역DCF (현재시총 기준) ⓘ"),
+        ("정상화 FCF 수익률 (%)", "📎 FCF 수익률 (최근 vs 평균FCF) ⓘ"),
         ("OPM (%)", "📎 OPM ⓘ"),
         ("CapEx/감가상각비 (%)", "📎 CapEx/D&A ⓘ"),
     ]
@@ -671,7 +695,7 @@ if "last_price_refresh" in st.session_state:
     st.sidebar.caption(f"⏱️ 최근 주가 갱신: `{st.session_state['last_price_refresh']}`")
 
 with st.sidebar.expander("🔄 데이터 수집 / 종목 유니버스 관리", expanded=False):
-    st.caption("수집 시 각 기업의 최근 결산 데이터와 최근 5개년(가용 연도) 히스토리를 한 번에 모두 모아 저장합니다.")
+    st.caption("수집 시 각 기업의 최근 결산 데이터와 최근 4~5개년(가용 연도) 히스토리를 한 번에 모두 모아 저장합니다.")
     fetch_target_mkt = st.selectbox("수집할 시장 선택", ["KR", "US"], index=0 if selected_market != "US" else 1)
 
     if fetch_target_mkt == "KR":
@@ -789,7 +813,7 @@ required_return_r = st.sidebar.number_input(
 deduct_cash_opt = st.sidebar.checkbox(
     "사용자본(CE)에서 현금성자산 차감",
     value=False,
-    help="체크 시 (총자산 - 유동부채 - 현금및단기금융상품)으로 현금 부자 기업의 실질 ROCE(최근 및 5년 평균 모두)를 계산합니다.",
+    help="체크 시 (총자산 - 유동부채 - 현금및단기금융상품)으로 현금 부자 기업의 실질 ROCE(최근 및 다개년 평균 모두)를 계산합니다.",
 )
 
 ccr_denom_label = st.sidebar.selectbox(
@@ -822,7 +846,7 @@ allow_missing_gpm = st.sidebar.checkbox(
 # =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 1. 핵심 4대 필터 설정")
-st.sidebar.caption("기준 수치를 설정하세요. 카드/테이블 화면에서 [최근 결산 기준]으로 볼지 [5년 평균 기준]으로 볼지 즉시 전환할 수 있습니다.")
+st.sidebar.caption("기준 수치를 설정하세요. 우측 메인 화면에서 특정 지표를 무시(면제)했을 때의 결과도 즉시 비교할 수 있습니다.")
 
 # [필터 1] GPM
 st.sidebar.markdown("**① 매출총이익률 (`GPM (%)`) ⓘ**", help=get_metric_tooltip("GPM (%)"))
@@ -880,6 +904,7 @@ with st.sidebar.expander("➕ 참고 지표 / 역DCF 추가 필터링 (선택)",
                     "value": float(e_val),
                     "enabled": True,
                     "label": f"{m_sel} {e_op} {e_val}",
+                    "short_name": m_sel.split(" ")[0],
                 }
             )
 
@@ -911,7 +936,6 @@ if raw_df is None or raw_df.empty:
             st.rerun()
     st.stop()
 
-# 전체 캐시(한·미 통합) 메트릭 계산 (유니버스 탭 및 상세 페이지 조회를 위해 전체 계산본 유지)
 all_metrics_df = de.compute_quality_metrics(
     all_raw_df,
     deduct_cash_from_ce=deduct_cash_opt,
@@ -920,7 +944,6 @@ all_metrics_df = de.compute_quality_metrics(
     required_return_pct=required_return_r,
 )
 
-# 현재 선택된 시장 메트릭 필터링
 if selected_market in ["KR", "US"]:
     metrics_df = all_metrics_df[all_metrics_df["market"] == selected_market].reset_index(drop=True)
 else:
@@ -955,8 +978,8 @@ def render_company_detail_page(symbol: str) -> None:
     in_uni = symbol in uni_store
     uni_info = uni_store.get(symbol, {})
 
-    # 최상단 네비게이션 & 다른 기업 빠른 전환 바
-    nav_c1, nav_c2, nav_c3 = st.columns([2.2, 4.8, 2.0])
+    # 최상단 네비게이션 & 다른 기업 빠른 전환 바 (충분한 상단 패딩으로 절대 잘리지 않음)
+    nav_c1, nav_c2, nav_c3 = st.columns([2.3, 4.7, 2.0])
     with nav_c1:
         ret_label = "⭐ 유니버스 보관함으로 돌아가기" if st.session_state.get("detail_return_tab") == "universe" else "⬅️ 스크리너 목록으로 돌아가기"
         if st.button(ret_label, type="secondary", use_container_width=True):
@@ -1027,7 +1050,7 @@ def render_company_detail_page(symbol: str) -> None:
                 st.markdown(render_memo_with_links_html(new_memo), unsafe_allow_html=True)
 
     # -----------------------------------------------------------------
-    # 섹션 B: 최근 수치 vs 5개년 평균 지표 한눈에 비교 카드
+    # 섹션 B: 최근 수치 vs 다개년 평균 지표 한눈에 비교 카드
     # -----------------------------------------------------------------
     st.markdown(f"#### 📊 1️⃣ 핵심 퀄리티 지표: `최근 결산` vs `{avg_yr_cnt}개년 평균` 비교")
     gpm_now, gpm_5y = row_data.get("GPM (%)", np.nan), row_data.get("GPM_5Y (%)", np.nan)
@@ -1075,16 +1098,17 @@ def render_company_detail_page(symbol: str) -> None:
     st.markdown("#### 🔥 2️⃣ 기업별 맞춤 성장기간($N$년) 정밀 2단계 역DCF & 내재가치 계산기")
     with st.container(border=True):
         st.caption(
-            "영원히 성장하는 단순 가정($g = r - \\text{FCF Yield}$)을 넘어, **향후 $N$년(예: 10년, 15년) 동안만 고성장하고 이후에는 성숙기 영구성장률($g_2$, 기본 0%)로 둔화되어 밸류에이션이 낮아지는(말기 FCF 수익률 $= r - g_2$) 정밀 2단계 할인모델**입니다."
+            "영원히 성장하는 단순 가정($g = r - \\text{FCF Yield}$)을 넘어, **향후 $N$년(예: 10년, 15년) 동안만 고성장하고 이후에는 성숙기 영구성장률($g_2$, 기본 0%)로 둔화되어 밸류에이션이 낮아지는(말기 FCF 수익률 $= r - g_2$) 정밀 2단계 할인모델**입니다. *(분모인 시가총액은 둘 다 '현재 시가총액' 기준입니다)*"
         )
 
-        p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([1.8, 1.5, 1.6, 1.6, 1.8])
+        p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns([1.9, 1.4, 1.6, 1.6, 1.8])
         with p_col1:
             fcf_base_choice = st.radio(
-                "기준 정상화 FCF 선택",
+                "기준 정상화 FCF 선택 (분자)",
                 options=["최근 결산 FCF", f"{avg_yr_cnt}개년 평균 FCF"],
                 index=0,
                 key=f"fcf_base_{symbol}",
+                help="분모는 항상 '현재 시가총액'이며, 분자에 최근 1년치 FCF를 넣을지 과거 4~5년 평균 FCF(일시적 변동 제거)를 넣을지 선택합니다.",
             )
         with p_col2:
             n_years_input = st.number_input(
@@ -1131,13 +1155,11 @@ def render_company_detail_page(symbol: str) -> None:
                 st.toast(f"⭐ {comp_name}의 성장기간({n_years_input}년) 및 성장률 가정이 유니버스에 저장되었습니다!")
                 st.rerun()
 
-        # 기준 FCF 및 역DCF / 정방향 DCF 계산
         base_fcf = row_data.get("norm_fcf", np.nan) if fcf_base_choice == "최근 결산 FCF" else row_data.get("norm_fcf_5y", np.nan)
         cur_mcap = row_data.get("market_cap", np.nan)
         cur_fcf_yield = (base_fcf / cur_mcap * 100.0) if (pd.notna(base_fcf) and pd.notna(cur_mcap) and cur_mcap > 0) else np.nan
         perp_implied_g = (required_return_r - cur_fcf_yield) if pd.notna(cur_fcf_yield) else np.nan
 
-        # 1) N년 한정 정밀 역DCF 요구성장률 (현재 시총을 정당화하는 1~N년 연평균 성장률)
         two_stage_implied_g = de.solve_two_stage_implied_growth(
             fcf0=base_fcf,
             market_cap=cur_mcap,
@@ -1146,7 +1168,6 @@ def render_company_detail_page(symbol: str) -> None:
             g2_pct=float(g2_term_input),
         )
 
-        # 2) 내가 입력한 성장률(g1_est_input, g2_term_input) 기준 적정 내재가치(적정 시가총액)
         dcf_res = de.calc_two_stage_dcf_value(
             fcf0=base_fcf,
             r_pct=required_return_r,
@@ -1169,14 +1190,14 @@ def render_company_detail_page(symbol: str) -> None:
         dcf_box_html = f"""
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-top:8px;">
             <div class="m-tile-item" style="padding:12px; border-left:4px solid #2563eb; text-align:left;">
-                <div class="m-tile-item-lbl">① 기준 정상화 FCF & 현재 수익률</div>
+                <div class="m-tile-item-lbl">① 기준 정상화 FCF ÷ 현재 시가총액</div>
                 <div class="m-tile-item-val" style="font-size:1.1rem; color:#1d4ed8;">{fcf_str} (Yield {yield_str})</div>
                 <div style="font-size:0.72rem; color:#64748b; margin-top:3px;">현재 시총: {html.escape(str(row_data['시가총액_표시']))}</div>
             </div>
             <div class="m-tile-item" style="padding:12px; border-left:4px solid #f59e0b; text-align:left;">
                 <div class="m-tile-item-lbl">② 영구성장 역DCF 기대성장률 (∞)</div>
                 <div class="m-tile-item-val" style="font-size:1.15rem; color:#b45309;">{perp_g_str} / 년 (영구)</div>
-                <div style="font-size:0.72rem; color:#78716c; margin-top:3px;">공식: r({required_return_r:.1f}%) - FCF수익률({yield_str})</div>
+                <div style="font-size:0.72rem; color:#78716c; margin-top:3px;">공식: r({required_return_r:.1f}%) - 현재FCF수익률({yield_str})</div>
             </div>
             <div class="m-tile-item" style="padding:12px; border-left:4px solid #dc2626; background:#fff7ed; text-align:left;">
                 <div class="m-tile-item-lbl" style="color:#c2410c; font-weight:700;">③ 🔥 {int(n_years_input)}년 한정 정밀 역DCF 요구성장률</div>
@@ -1195,7 +1216,7 @@ def render_company_detail_page(symbol: str) -> None:
     st.markdown("---")
 
     # -----------------------------------------------------------------
-    # 섹션 D: 최근 4~5개년 연도별 재무제표 & [5개년 평균] 통합 비교 테이블 + 차트
+    # 섹션 D: 최근 4~5개년 연도별 재무제표 & [다개년 평균] 통합 비교 테이블 + 차트
     # -----------------------------------------------------------------
     hist_json_str = row_data.get("history_json", None)
     df_multi = de.fetch_stock_multiyear_data(
@@ -1462,7 +1483,7 @@ if active_detail_sym:
 
 
 # =====================================================================
-# 메인 대시보드: 필터 적용 기준 선택 (카드를 볼 때 최근 vs 5년 평균 선택)
+# 메인 대시보드 헤더 & 5개년 보강 배너
 # =====================================================================
 hdr_col1, hdr_col2 = st.columns([6.5, 2.5])
 with hdr_col1:
@@ -1483,7 +1504,6 @@ with hdr_col2:
         st.toast(f"✅ {cnt}개 기업 주가·시가총액 및 역DCF 기대성장률이 갱신되었습니다!")
         st.rerun()
 
-# 기존 캐시에 5개년 히스토리(`history_json`)가 아직 없는 종목이 있을 경우 원클릭 보강 배너 노출
 missing_5y_cnt = int((metrics_df.get("평균_연도수", pd.Series(1, index=metrics_df.index)) <= 1).sum())
 if missing_5y_cnt > len(metrics_df) * 0.3:
     with st.container(border=True):
@@ -1491,7 +1511,7 @@ if missing_5y_cnt > len(metrics_df) * 0.3:
         with bc1:
             st.markdown(
                 f"💡 **현재 캐시된 기업 중 `{missing_5y_cnt}개` 종목이 과거 단일 연도(1개년)로만 저장되어 있습니다.**\n"
-                f"우측 버튼을 한 번만 누르면 모든 기업의 **최근 5개년(가용 연도) 재무제표를 일괄 수집**하여 `최근 수치 + 5년 평균 수치`가 완벽히 표시됩니다."
+                f"우측 버튼을 한 번만 누르면 모든 기업의 **최근 4~5개년 재무제표를 일괄 수집**하여 `최근 수치 + 다개년 평균 수치`가 완벽히 표시됩니다."
             )
         with bc2:
             if st.button("⚡ 5개년 평균 데이터 일괄 수집·보강", type="primary", use_container_width=True):
@@ -1505,20 +1525,18 @@ if missing_5y_cnt > len(metrics_df) * 0.3:
                 st.toast(f"✅ {cnt_bf}개 기업의 5개년 재무 데이터 보강이 완료되었습니다!")
                 st.rerun()
 
-# 카드/테이블을 볼 때 필터 기준(최근 결산 vs 5개년 평균 vs 동시 충족) 선택 바
-basis_col1, basis_col2 = st.columns([4.5, 5.5])
-with basis_col1:
-    filter_basis_mode = st.radio(
-        "🎛️ 필터링 평가 기준 선택 (카드는 최근 수치와 5년 평균을 항상 함께 표시합니다)",
-        options=[
-            "최근 결산 기준",
-            "5개년 평균 기준",
-            "최근 + 5개년 평균 동시 충족",
-        ],
-        index=0,
-        horizontal=True,
-        key="filter_basis_mode",
-    )
+# 카드/테이블을 볼 때 필터 기준(최근 결산 vs 다개년 평균 vs 동시 충족) 선택 바
+filter_basis_mode = st.radio(
+    "🎛️ 필터링 평가 기준 선택 (카드와 테이블에는 항상 최근 결산 수치와 4~5개년 평균 수치가 나란히 함께 표시됩니다)",
+    options=[
+        "최근 결산 기준",
+        "5개년 평균 기준",
+        "최근 + 5개년 평균 동시 충족",
+    ],
+    index=0,
+    horizontal=True,
+    key="filter_basis_mode",
+)
 
 # 선택한 기준에 따라 활성 필터 규칙 조립
 gpm_col_target = "GPM_5Y (%)" if filter_basis_mode == "5개년 평균 기준" else "GPM (%)"
@@ -1531,21 +1549,24 @@ active_rules: List[Dict[str, Any]] = [
         "operator": op_gpm,
         "value": float(val_gpm),
         "enabled": use_gpm,
-        "label": f"{'5년평균 ' if '5Y' in gpm_col_target else ''}GPM {op_gpm} {val_gpm:.0f}%",
+        "label": f"{'평균 ' if '5Y' in gpm_col_target else ''}GPM {op_gpm} {val_gpm:.0f}%",
+        "short_name": "GPM(평균)" if "5Y" in gpm_col_target else "GPM",
     },
     {
         "metric": roce_col_target,
         "operator": op_roce,
         "value": float(val_roce),
         "enabled": use_roce,
-        "label": f"{'5년평균 ' if '5Y' in roce_col_target else ''}ROCE {op_roce} {val_roce:.0f}%",
+        "label": f"{'평균 ' if '5Y' in roce_col_target else ''}ROCE {op_roce} {val_roce:.0f}%",
+        "short_name": "ROCE(평균)" if "5Y" in roce_col_target else "ROCE",
     },
     {
         "metric": ccr_col_target,
         "operator": op_ccr,
         "value": float(val_ccr),
         "enabled": use_ccr,
-        "label": f"{'5년평균 ' if '5Y' in ccr_col_target else ''}CCR {op_ccr} {val_ccr:.0f}%",
+        "label": f"{'평균 ' if '5Y' in ccr_col_target else ''}CCR {op_ccr} {val_ccr:.0f}%",
+        "short_name": "CCR(평균)" if "5Y" in ccr_col_target else "CCR",
     },
 ]
 
@@ -1556,21 +1577,24 @@ if filter_basis_mode == "최근 + 5개년 평균 동시 충족":
             "operator": op_gpm,
             "value": float(val_gpm),
             "enabled": use_gpm,
-            "label": f"5년평균 GPM {op_gpm} {val_gpm:.0f}%",
+            "label": f"평균 GPM {op_gpm} {val_gpm:.0f}%",
+            "short_name": "GPM(평균)",
         },
         {
             "metric": "ROCE_5Y (%)",
             "operator": op_roce,
             "value": float(val_roce),
             "enabled": use_roce,
-            "label": f"5년평균 ROCE {op_roce} {val_roce:.0f}%",
+            "label": f"평균 ROCE {op_roce} {val_roce:.0f}%",
+            "short_name": "ROCE(평균)",
         },
         {
             "metric": "CCR_5Y (%)",
             "operator": op_ccr,
             "value": float(val_ccr),
             "enabled": use_ccr,
-            "label": f"5년평균 CCR {op_ccr} {val_ccr:.0f}%",
+            "label": f"평균 CCR {op_ccr} {val_ccr:.0f}%",
+            "short_name": "CCR(평균)",
         },
     ])
 
@@ -1581,11 +1605,41 @@ active_rules.append(
         "value": float(val_icr),
         "enabled": use_icr,
         "label": f"이자보상 {op_icr} {val_icr:.0f}배",
+        "short_name": "이자보상",
     }
 )
 active_rules.extend(extra_rules)
 
 passed_df, annotated_df, funnel_stats = de.apply_filter_rules(metrics_df, active_rules)
+
+# 각 기업별로 미달한 조건 목록(`미달_지표_요약`)과 특정 지표 1개 무시 시 통과 여부 계산
+enabled_rules = [r for r in active_rules if r.get("enabled", True) and r["metric"] in annotated_df.columns]
+active_rule_cnt = len(enabled_rules)
+
+if not annotated_df.empty:
+    failed_labels_per_row: List[str] = []
+    failed_count_per_row: List[int] = []
+    for _, r in annotated_df.iterrows():
+        f_list = []
+        for rule in enabled_rules:
+            m_col = rule["metric"]
+            pass_col = f"통과_{m_col}"
+            if pass_col in r and not bool(r[pass_col]):
+                s_name = rule.get("short_name") or rule.get("label") or m_col
+                actual_val = r.get(m_col, np.nan)
+                if pd.notna(actual_val) and actual_val > -900:
+                    val_s = f"{actual_val:.1f}"
+                else:
+                    val_s = "N/A"
+                f_list.append(f"❌ {s_name}({val_s})")
+        failed_count_per_row.append(len(f_list))
+        if len(f_list) == 0:
+            failed_labels_per_row.append("✅ 전 조건 통과")
+        else:
+            failed_labels_per_row.append(f"⚠️ {len(f_list)}개 미달: " + ", ".join(f_list))
+
+    annotated_df["미달_조건수"] = failed_count_per_row
+    annotated_df["통과_상태_요약"] = failed_labels_per_row
 
 if funnel_stats:
     chips_html = []
@@ -1606,38 +1660,79 @@ if funnel_stats:
 st.markdown("---")
 
 # =====================================================================
-# 3개 메인 탭 구성:
-# - TAB 1: ✅ 필터 통과 기업 리스트 (최근 + 5개년 평균 동시 표시)
+# 2개 통합 메인 탭 구성:
+# - TAB 1: 🔍 퀄리티 스크리너 & 조건별 매트릭스 (통과 리스트 + 특정 지표 무시 + 전체 매트릭스 통합!)
 # - TAB 2: ⭐ 나의 유니버스 보관함 (기업별 성장기간 N년 정밀 역DCF & 메모/링크)
-# - TAB 3: 📊 전체 종목 통과/탈락 매트릭스
 # =====================================================================
 universe_store = de.load_universe_store()
-tab1_label = f"✅ 필터 통과 기업 리스트 ({len(passed_df)}개)"
+tab1_label = f"🔍 퀄리티 스크리너 & 조건별 분석 (통과 {len(passed_df)} / 전체 {len(annotated_df)})"
 tab2_label = f"⭐ 나의 유니버스 보관함 ({len(universe_store)}개)"
-tab3_label = f"📊 전체 종목 통과/탈락 매트릭스 ({len(annotated_df)}개)"
 
-if st.session_state.pop("clear_passed_selection", False):
-    st.session_state["df_passed_table"] = {"selection": {"rows": [], "columns": []}}
-if st.session_state.pop("clear_matrix_selection", False):
-    st.session_state["df_matrix_table"] = {"selection": {"rows": [], "columns": []}}
+if st.session_state.pop("clear_screener_selection", False):
+    st.session_state["df_screener_table"] = {"selection": {"rows": [], "columns": []}}
 if st.session_state.pop("clear_universe_selection", False):
     st.session_state["df_universe_table"] = {"selection": {"rows": [], "columns": []}}
 
-tab1, tab2, tab3 = st.tabs([tab1_label, tab2_label, tab3_label])
+tab_screener, tab_universe = st.tabs([tab1_label, tab2_label])
 
 
 # ---------------------------------------------------------------------
-# TAB 1: 필터 통과 기업 리스트 (최근 지표 + 5개년 평균 지표 동시 표시)
+# TAB 1: 통합 퀄리티 스크리너 (통과 리스트 + 특정 지표 무시 What-If + 전체 매트릭스)
 # ---------------------------------------------------------------------
-with tab1:
-    st.subheader(f"✅ 필터 통과 기업 ({len(passed_df)}개 / 전체 {len(annotated_df)}개) — 기준: `{filter_basis_mode}`")
+with tab_screener:
     render_hover_chips_guide()
 
-    if passed_df.empty:
-        st.warning("현재 설정된 필터 조건을 모두 만족하는 기업이 없습니다. 기준을 완화하거나 [📊 전체 종목 통과/탈락 매트릭스] 탭을 확인해 보세요.")
-    else:
-        sort_col1, sort_col2, mode_col = st.columns([2.8, 2.0, 3.2])
-        with sort_col1:
+    # [핵심 기능] 특정 지표를 무시(면제)하고 봤을 때 몇 개가 통과하는지 미리 계산하여 선택 옵션 제공
+    ignore_options: List[str] = []
+    ignore_df_map: Dict[str, pd.DataFrame] = {}
+
+    # 1) 모든 활성 조건 통과
+    opt_all_pass = f"✅ 모든 조건 통과 기업 ({len(passed_df)}개)"
+    ignore_options.append(opt_all_pass)
+    ignore_df_map[opt_all_pass] = annotated_df[annotated_df["미달_조건수"] == 0].copy() if not annotated_df.empty else pd.DataFrame()
+
+    # 2) 각 활성 지표 1개를 무시(면제)했을 때 통과하는 기업들 (기존 통과 기업 + 딱 그 지표 하나만 미달했던 기업)
+    if not annotated_df.empty and active_rule_cnt >= 2:
+        for rule in enabled_rules:
+            m_col = rule["metric"]
+            pass_col = f"통과_{m_col}"
+            s_name = rule.get("short_name") or rule.get("label") or m_col
+            other_pass_cols = [f"통과_{r['metric']}" for r in enabled_rules if r["metric"] != m_col and f"통과_{r['metric']}" in annotated_df.columns]
+            if other_pass_cols:
+                mask_ignore_this = annotated_df[other_pass_cols].all(axis=1)
+                df_ign = annotated_df[mask_ignore_this].copy()
+                rescue_cnt = int((mask_ignore_this & (~annotated_df[pass_col])).sum())
+                opt_lbl = f"🔓 [{s_name}] 조건 무시 시 통과 ({len(df_ign)}개, +{rescue_cnt}개 구제)"
+                ignore_options.append(opt_lbl)
+                ignore_df_map[opt_lbl] = df_ign
+
+        # 3) 딱 1개 조건만 아깝게 미달한 기업만 모아보기
+        df_near_miss = annotated_df[annotated_df["미달_조건수"] == 1].copy()
+        opt_near = f"🤏 아깝게 1개 조건만 미달한 기업만 보기 ({len(df_near_miss)}개)"
+        ignore_options.append(opt_near)
+        ignore_df_map[opt_near] = df_near_miss
+
+    # 4) 전체 종목 통과/탈락 매트릭스 전체 보기
+    opt_full = f"📊 전체 종목 통과/탈락 매트릭스 ({len(annotated_df)}개 전체)"
+    ignore_options.append(opt_full)
+    ignore_df_map[opt_full] = annotated_df.copy()
+
+    # 상단 통합 컨트롤 박스: [어떤 그룹/무시 조건을 볼지] + [정렬 기준] + [카드 뷰 vs 테이블 뷰]
+    with st.container(border=True):
+        st.markdown("##### 🎛️ 조회 대상 & 특정 지표 무시(What-If) 시뮬레이터")
+        st.caption(
+            "모든 조건을 통과한 기업뿐만 아니라, **특정 지표(예: 대규모 증설로 인한 CCR 미달 등) 하나를 무시하고 봤을 때 통과하는 기업**이나 **전체 통과/탈락 매트릭스**를 한 화면에서 바로 전환하며 볼 수 있습니다."
+        )
+        selected_group_opt = st.radio(
+            "조회할 기업 그룹 선택",
+            options=ignore_options,
+            index=0,
+            horizontal=True,
+            key="screener_group_opt",
+        )
+
+        ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([2.8, 2.0, 3.2])
+        with ctrl_c1:
             sort_by_metric = st.selectbox(
                 "정렬 기준",
                 options=[
@@ -1654,22 +1749,34 @@ with tab1:
                 ],
                 index=2 if filter_basis_mode == "최근 결산 기준" else 3,
             )
-        with sort_col2:
+        with ctrl_c2:
             default_asc = True if "역DCF" in sort_by_metric else False
             sort_asc = st.checkbox("오름차순 정렬 (낮은 순)", value=default_asc)
-        with mode_col:
+        with ctrl_c3:
             view_mode = st.radio(
                 "화면 표시 모드",
-                options=["📱 모바일 카드 뷰", "📊 PC 와이드 테이블"],
+                options=["📱 모바일 카드 뷰", "📊 PC 와이드 테이블 (매트릭스)"],
                 index=0,
                 horizontal=True,
-                key="passed_view_mode",
+                key="screener_view_mode",
             )
 
-        disp_df = passed_df.sort_values(by=sort_by_metric, ascending=sort_asc).reset_index(drop=True)
+    target_df = ignore_df_map.get(selected_group_opt, pd.DataFrame())
 
-        if view_mode == "📱 모바일 카드 뷰":
-            st.caption("💡 각 카드에는 **최근 결산 수치**와 **5개년(가용 연도) 평균 수치**가 함께 표시됩니다. 카드를 클릭하면 기업 상세 페이지로 넘어가며, `⭐ 유니버스 보관` 버튼으로 보관함에 담을 수 있습니다.")
+    if target_df.empty:
+        st.warning("선택한 조건 그룹에 해당하는 기업이 없습니다. 위에서 다른 지표 무시 옵션을 선택하거나 좌측 필터 기준을 완화해 보세요.")
+    else:
+        # 정렬: 미달 조건수가 적은 순(통과 기업 우선) -> 선택한 정렬 지표 순
+        disp_df = target_df.sort_values(
+            by=["미달_조건수", sort_by_metric],
+            ascending=[True, sort_asc],
+        ).reset_index(drop=True)
+
+        if view_mode.startswith("📱"):
+            st.caption(
+                "💡 **FCF 수익률 및 역DCF 안내**: `최근 FCF 기준`과 `4년평균 FCF 기준` 모두 분모는 **오늘의 시가총액(현재 주가)**입니다. "
+                "(단일 연도 FCF의 일시적 착시를 피하기 위해 4~5년 평균 FCF를 현재 시가총액으로 나눈 값을 함께 표시합니다.)"
+            )
             for c_idx, row in disp_df.iterrows():
                 sym = row["symbol"]
                 name = row["name"]
@@ -1682,6 +1789,7 @@ with tab1:
                 g_val = row.get("역DCF 기대성장률 (%)", np.nan)
                 g_5y = row.get("역DCF 기대성장률_5Y (%)", np.nan)
                 fcf_y = row.get("정상화 FCF 수익률 (%)", np.nan)
+                fcf_y_5y = row.get("정상화 FCF 수익률_5Y (%)", np.nan)
 
                 gpm, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
                 roce, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
@@ -1690,13 +1798,24 @@ with tab1:
                 ccr_diag = row.get("CCR 상태 진단", "")
                 int_cov = row.get("이자보상배율_표시", "N/A")
 
+                fail_cnt = int(row.get("미달_조건수", 0))
+                status_summary = str(row.get("통과_상태_요약", ""))
+                if fail_cnt == 0:
+                    badge_html = f"<span class='pass-badge-ok'>{html.escape(status_summary)}</span>"
+                elif fail_cnt == 1:
+                    badge_html = f"<span class='pass-badge-warn'>{html.escape(status_summary)}</span>"
+                else:
+                    badge_html = f"<span class='pass-badge-fail'>{html.escape(status_summary)}</span>"
+
                 in_uni = sym in universe_store
                 uni_badge = "⭐ [유니버스 보관중]" if in_uni else ""
                 box_cls = "m-card-box in-universe" if in_uni else "m-card-box"
 
                 g_text = f"{g_val:+.1f}%" if pd.notna(g_val) else "N/A"
-                g_5y_text = f"({yr_cnt}년평균 FCF 기준 {g_5y:+.1f}%)" if pd.notna(g_5y) else ""
-                fcf_text = f"FCF수익률 {fcf_y:.1f}%" if pd.notna(fcf_y) else ""
+                g_5y_text = f"(현재시총 ÷ {yr_cnt}년평균FCF 기준: {g_5y:+.1f}%)" if pd.notna(g_5y) else ""
+                fcf_text = f"현재시총 대비 FCF수익률: 최근 {fcf_y:.1f}%" if pd.notna(fcf_y) else ""
+                if pd.notna(fcf_y_5y):
+                    fcf_text += f" ({yr_cnt}년평균FCF {fcf_y_5y:.1f}%)"
 
                 gpm_str = f"{gpm:.1f}%" if pd.notna(gpm) else "N/A"
                 gpm_5y_str = f"{yr_cnt}년 평균 {gpm_5y:.1f}%" if pd.notna(gpm_5y) else "N/A"
@@ -1723,17 +1842,18 @@ with tab1:
                         <div>
                             <span class="m-company-title">{html.escape(name)}</span>
                             <span style="font-size:0.78rem; color:#64748b; margin-left:4px;">({html.escape(sym)})</span>
+                            <span style="margin-left:6px;">{badge_html}</span>
                             <span style="font-size:0.76rem; color:#d97706; font-weight:700; margin-left:6px;">{uni_badge}</span>
                         </div>
                         <div class="m-company-meta">{html.escape(str(mkt_d))} · {html.escape(str(mcap))}</div>
                     </div>
                     <div class="m-dcf-strip">
                         <div>
-                            <div style="font-size:0.72rem; color:#c2410c; font-weight:600;">🔥 영구 역DCF 기대성장률 (r={required_return_r:.0f}%)</div>
-                            <div style="font-size:1.12rem; font-weight:800; color:#9a3412; line-height:1.2;">{g_text} <span style="font-size:0.76rem; font-weight:600; color:#c2410c;">{g_5y_text}</span></div>
+                            <div style="font-size:0.72rem; color:#c2410c; font-weight:600;">🔥 영구 역DCF 기대성장률 (r={required_return_r:.0f}%, 현재시총 기준)</div>
+                            <div style="font-size:1.12rem; font-weight:800; color:#9a3412; line-height:1.2;">{g_text} <span style="font-size:0.75rem; font-weight:600; color:#c2410c;">{g_5y_text}</span></div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-size:0.75rem; color:#ea580c; font-weight:600;">{fcf_text}</div>
+                            <div style="font-size:0.74rem; color:#ea580c; font-weight:600;">{fcf_text}</div>
                             <div style="font-size:0.7rem; color:#78716c;">결산 {html.escape(str(fdate))}</div>
                         </div>
                     </div>
@@ -1783,15 +1903,18 @@ with tab1:
                             st.rerun()
         else:
             st.caption("👉 **테이블의 기업 행을 클릭**하면 즉시 해당 기업의 **[🏢 기업 심층 상세 페이지]**로 화면이 전환됩니다.")
-            disp_df["유니버스_보관"] = disp_df["symbol"].apply(lambda s: "⭐ 보관중" if s in universe_store else "")
+            disp_df["⭐ 유니버스"] = disp_df["symbol"].apply(lambda s: "⭐ 보관중" if s in universe_store else "")
 
             view_cols = [
-                "유니버스_보관",
+                "⭐ 유니버스",
                 "symbol",
                 "name",
                 "market_display",
                 "시가총액_표시",
+                "통과_조건수",
+                "통과_상태_요약",
                 "정상화 FCF 수익률 (%)",
+                "정상화 FCF 수익률_5Y (%)",
                 "역DCF 기대성장률 (%)",
                 "GPM (%)",
                 "GPM_5Y (%)",
@@ -1807,21 +1930,23 @@ with tab1:
             ]
             view_df = disp_df[view_cols].rename(
                 columns={
-                    "유니버스_보관": "⭐ 유니버스",
                     "symbol": "티커",
                     "name": "기업명",
                     "market_display": "시장",
-                    "시가총액_표시": "시가총액",
-                    "정상화 FCF 수익률 (%)": "FCF 수익률(최근)",
+                    "시가총액_표시": "현재 시가총액",
+                    "통과_조건수": "통과수",
+                    "통과_상태_요약": "조건별 통과/미달 진단",
+                    "정상화 FCF 수익률 (%)": "FCF수익률(최근FCF/현재시총)",
+                    "정상화 FCF 수익률_5Y (%)": "FCF수익률(평균FCF/현재시총)",
                     "역DCF 기대성장률 (%)": f"🔥 역DCF g (r={required_return_r:.0f}%)",
-                    "GPM (%)": "🎯 GPM (최근)",
-                    "GPM_5Y (%)": "📊 GPM (5년평균)",
-                    "ROCE (%)": "🎯 ROCE (최근)",
-                    "ROCE_5Y (%)": "📊 ROCE (5년평균)",
-                    "CCR (%)": "🎯 CCR (최근)",
-                    "CCR_5Y (%)": "📊 CCR (5년평균)",
-                    "OPM (%)": "📎 OPM (최근)",
-                    "OPM_5Y (%)": "📊 OPM (5년평균)",
+                    "GPM (%)": "🎯 GPM(최근)",
+                    "GPM_5Y (%)": "📊 GPM(평균)",
+                    "ROCE (%)": "🎯 ROCE(최근)",
+                    "ROCE_5Y (%)": "📊 ROCE(평균)",
+                    "CCR (%)": "🎯 CCR(최근)",
+                    "CCR_5Y (%)": "📊 CCR(평균)",
+                    "OPM (%)": "📎 OPM(최근)",
+                    "OPM_5Y (%)": "📊 OPM(평균)",
                     "이자보상배율_표시": "🎯 이자보상배율",
                     "CCR 상태 진단": "🩺 CCR 원인 진단",
                     "fiscal_date": "결산기준일",
@@ -1829,19 +1954,20 @@ with tab1:
             )
             g_col_name = f"🔥 역DCF g (r={required_return_r:.0f}%)"
 
-            event_passed = st.dataframe(
+            event_screener = st.dataframe(
                 view_df.style.format(
                     {
-                        "FCF 수익률(최근)": "{:.2f}%",
+                        "FCF수익률(최근FCF/현재시총)": "{:.2f}%",
+                        "FCF수익률(평균FCF/현재시총)": "{:.2f}%",
                         g_col_name: "{:+.2f}%",
-                        "🎯 GPM (최근)": "{:.1f}%",
-                        "📊 GPM (5년평균)": "{:.1f}%",
-                        "🎯 ROCE (최근)": "{:.1f}%",
-                        "📊 ROCE (5년평균)": "{:.1f}%",
-                        "🎯 CCR (최근)": "{:.1f}%",
-                        "📊 CCR (5년평균)": "{:.1f}%",
-                        "📎 OPM (최근)": "{:.1f}%",
-                        "📊 OPM (5년평균)": "{:.1f}%",
+                        "🎯 GPM(최근)": "{:.1f}%",
+                        "📊 GPM(평균)": "{:.1f}%",
+                        "🎯 ROCE(최근)": "{:.1f}%",
+                        "📊 ROCE(평균)": "{:.1f}%",
+                        "🎯 CCR(최근)": "{:.1f}%",
+                        "📊 CCR(평균)": "{:.1f}%",
+                        "📎 OPM(최근)": "{:.1f}%",
+                        "📊 OPM(평균)": "{:.1f}%",
                     },
                     na_rep="N/A",
                 ),
@@ -1849,22 +1975,22 @@ with tab1:
                 height=min(650, 120 + len(view_df) * 38),
                 on_select="rerun",
                 selection_mode="single-row",
-                key="df_passed_table",
+                key="df_screener_table",
             )
 
-            if event_passed and hasattr(event_passed, "selection"):
-                p_rows = event_passed.selection.get("rows", [])
-                if p_rows:
-                    sel_idx = p_rows[0]
+            if event_screener and hasattr(event_screener, "selection"):
+                s_rows = event_screener.selection.get("rows", [])
+                if s_rows:
+                    sel_idx = s_rows[0]
                     if sel_idx < len(disp_df):
                         clicked_sym = disp_df.iloc[sel_idx]["symbol"]
                         open_company_detail(clicked_sym, return_tab="screener")
                         st.rerun()
 
-        # 다운로드용 데이터프레임
         export_cols = [
             "symbol", "name", "market_display", "시가총액_표시",
-            "정상화 FCF 수익률 (%)", "역DCF 기대성장률 (%)",
+            "통과_조건수", "통과_상태_요약",
+            "정상화 FCF 수익률 (%)", "정상화 FCF 수익률_5Y (%)", "역DCF 기대성장률 (%)",
             "GPM (%)", "GPM_5Y (%)", "ROCE (%)", "ROCE_5Y (%)",
             "CCR (%)", "CCR_5Y (%)", "OPM (%)", "OPM_5Y (%)",
             "이자보상배율_표시", "CCR 상태 진단", "fiscal_date",
@@ -1873,7 +1999,7 @@ with tab1:
         dl_col1, dl_col2, _ = st.columns([2, 2, 6])
         csv_bytes = export_df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
         dl_col1.download_button(
-            label="📥 결과 CSV 다운로드 (utf-8-sig)",
+            label="📥 현재 목록 CSV 다운로드 (utf-8-sig)",
             data=csv_bytes,
             file_name=f"quality_screener_{selected_market}.csv",
             mime="text/csv",
@@ -1881,7 +2007,7 @@ with tab1:
         )
         excel_bytes = to_excel_bytes(export_df)
         dl_col2.download_button(
-            label="📥 결과 Excel (.xlsx) 다운로드",
+            label="📥 현재 목록 Excel (.xlsx) 다운로드",
             data=excel_bytes,
             file_name=f"quality_screener_{selected_market}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1892,13 +2018,12 @@ with tab1:
 # ---------------------------------------------------------------------
 # TAB 2: ⭐ 나의 유니버스 보관함 (기업별 성장기간 N년 정밀 역DCF & 메모/링크)
 # ---------------------------------------------------------------------
-with tab2:
+with tab_universe:
     st.subheader(f"⭐ 나의 유니버스 보관함 ({len(universe_store)}개 기업)")
     st.caption(
         "유니버스에 보관된 기업들만 따로 모아 **기업별 맞춤 성장기간($N$년)·성장기간 성장률($g_1$)·이후 성장률($g_2$) 기반 정밀 역DCF**를 계산하고, **구글 독스 등 웹 링크가 포함된 메모**를 영구 관리합니다."
     )
 
-    # 유니버스에 종목 빠른 추가 바
     with st.expander("➕ 스크리너 캐시 종목 중 유니버스에 바로 추가하기", expanded=len(universe_store) == 0):
         avail_to_add = [
             f"{r['name']} ({r['symbol']}) - {r.get('market_display', '')} | {r.get('시가총액_표시', '')}"
@@ -1923,18 +2048,16 @@ with tab2:
                 st.rerun()
 
     if not universe_store:
-        st.info("아직 유니버스 보관함에 담긴 기업이 없습니다. [✅ 필터 통과 기업 리스트] 카드에서 `⭐ 유니버스 보관` 버튼을 누르거나 위 검색창에서 기업을 추가해 보세요.")
+        st.info("아직 유니버스 보관함에 담긴 기업이 없습니다. [🔍 퀄리티 스크리너] 카드에서 `⭐ 유니버스 보관` 버튼을 누르거나 위 검색창에서 기업을 추가해 보세요.")
     else:
         uni_symbols = list(universe_store.keys())
         uni_df = all_metrics_df[all_metrics_df["symbol"].isin(uni_symbols)].copy().reset_index(drop=True)
 
-        # 캐시에 아직 없는 유니버스 종목이 있다면 안내
         missing_in_cache = [s for s in uni_symbols if s not in set(uni_df["symbol"].tolist())]
         if missing_in_cache:
             st.warning(f"캐시에 재무제표가 아직 없는 유니버스 종목({', '.join(missing_in_cache)})이 있습니다. 좌측 사이드바 [개별 종목 직접 추가]에서 추가해 주세요.")
 
         if not uni_df.empty:
-            # 유니버스 각 종목별 정밀 2단계 역DCF 및 적정 시총 계산
             uni_view_mode = st.radio(
                 "유니버스 표시 모드",
                 options=["📱 기업별 성장기간(N년) 시뮬레이션 & 메모 카드 뷰", "📊 유니버스 한눈에 비교 테이블 (행 클릭 시 상세 페이지)"],
@@ -1943,7 +2066,6 @@ with tab2:
                 key="uni_view_mode",
             )
 
-            # 테이블 및 카드 공통 계산 컬럼 부착
             n_list, g1_est_list, g2_list, g_imp_n_list, fair_mcap_list, upside_list, memo_list = [], [], [], [], [], [], []
             for _, r in uni_df.iterrows():
                 sym = r["symbol"]
@@ -1989,7 +2111,6 @@ with tab2:
                     u_item = universe_store.get(sym, {})
 
                     with st.container(border=True):
-                        # 상단 헤더 + 상세페이지 이동 & 삭제 버튼
                         hc1, hc2, hc3 = st.columns([5.0, 2.5, 1.5])
                         with hc1:
                             st.markdown(
@@ -2005,7 +2126,6 @@ with tab2:
                                 st.toast(f"🗑️ {name} 종목을 유니버스에서 제거했습니다.")
                                 st.rerun()
 
-                        # 최근 수치 & 5개년 평균 수치 요약 배지
                         gpm_now, gpm_5y = row.get("GPM (%)", np.nan), row.get("GPM_5Y (%)", np.nan)
                         roce_now, roce_5y = row.get("ROCE (%)", np.nan), row.get("ROCE_5Y (%)", np.nan)
                         ccr_now, ccr_5y = row.get("CCR (%)", np.nan), row.get("CCR_5Y (%)", np.nan)
@@ -2036,7 +2156,7 @@ with tab2:
                             <div class="m-tile-item" style="background:#f0fdf4; border:1px solid #bbf7d0; text-align:left; padding:8px 10px;">
                                 <div class="m-tile-item-lbl" style="color:#047857; font-weight:700;">💎 예상 성장률(연 {g1_cur:.1f}%) 적정 시총</div>
                                 <div class="m-tile-item-val" style="font-size:1.08rem; color:#065f46;">{fair_mcap_s} ({upside_s})</div>
-                                <div style="font-size:0.71rem; color:#047857;">현재 FCF수익률: {_fp(fcf_y_now)} (r={required_return_r:.1f}%)</div>
+                                <div style="font-size:0.71rem; color:#047857;">현재시총 대비 FCF수익률: {_fp(fcf_y_now)} (r={required_return_r:.1f}%)</div>
                             </div>
                             <div class="m-tile-item" style="padding:8px 10px;">
                                 <div class="m-tile-item-lbl">🎯 GPM (원가경쟁력)</div>
@@ -2057,11 +2177,9 @@ with tab2:
                         """
                         st.markdown(uni_metrics_html, unsafe_allow_html=True)
 
-                        # 메모 및 추출된 URL 바로가기 표시
                         cur_memo_str = u_item.get("memo", "")
                         st.markdown(render_memo_with_links_html(cur_memo_str), unsafe_allow_html=True)
 
-                        # 카드 내 성장기간(N년) / 성장률 / 메모 즉시 편집 익스팬더
                         with st.expander(f"⚙️ {name} 맞춤 성장기간(N년)·성장률 및 메모/링크 수정", expanded=False):
                             ec1, ec2, ec3 = st.columns(3)
                             with ec1:
@@ -2118,7 +2236,7 @@ with tab2:
                         "name": "기업명",
                         "market_display": "시장",
                         "시가총액_표시": "현재 시가총액",
-                        "정상화 FCF 수익률 (%)": "FCF 수익률",
+                        "정상화 FCF 수익률 (%)": "FCF 수익률(현재시총 기준)",
                         "역DCF 기대성장률 (%)": "영구 역DCF g(∞)",
                         "성장기간(N년)": "성장기간(N년)",
                         "이후성장률_g2(%)": "이후성장률(g2)",
@@ -2127,18 +2245,18 @@ with tab2:
                         "적정시가총액": "💎 적정 시가총액",
                         "상승여력(%)": "상승여력(%)",
                         "GPM (%)": "GPM(최근)",
-                        "GPM_5Y (%)": "GPM(5년평균)",
+                        "GPM_5Y (%)": "GPM(평균)",
                         "ROCE (%)": "ROCE(최근)",
-                        "ROCE_5Y (%)": "ROCE(5년평균)",
+                        "ROCE_5Y (%)": "ROCE(평균)",
                         "CCR (%)": "CCR(최근)",
-                        "CCR_5Y (%)": "CCR(5년평균)",
+                        "CCR_5Y (%)": "CCR(평균)",
                         "메모": "📝 메모 & 링크",
                     }
                 )
                 ev_uni = st.dataframe(
                     uni_t_df.style.format(
                         {
-                            "FCF 수익률": "{:.2f}%",
+                            "FCF 수익률(현재시총 기준)": "{:.2f}%",
                             "영구 역DCF g(∞)": "{:+.2f}%",
                             "성장기간(N년)": "{:.0f}년",
                             "이후성장률(g2)": "{:+.1f}%",
@@ -2146,11 +2264,11 @@ with tab2:
                             "내 예상성장률(g1)": "{:+.1f}%",
                             "상승여력(%)": "{:+.1f}%",
                             "GPM(최근)": "{:.1f}%",
-                            "GPM(5년평균)": "{:.1f}%",
+                            "GPM(평균)": "{:.1f}%",
                             "ROCE(최근)": "{:.1f}%",
-                            "ROCE(5년평균)": "{:.1f}%",
+                            "ROCE(평균)": "{:.1f}%",
                             "CCR(최근)": "{:.1f}%",
-                            "CCR(5년평균)": "{:.1f}%",
+                            "CCR(평균)": "{:.1f}%",
                         },
                         na_rep="N/A",
                     ),
@@ -2167,84 +2285,3 @@ with tab2:
                         if sel_u_idx < len(uni_df):
                             open_company_detail(uni_df.iloc[sel_u_idx]["symbol"], return_tab="universe")
                             st.rerun()
-
-
-# ---------------------------------------------------------------------
-# TAB 3: 전체 유니버스 통과/탈락 매트릭스 (최근 + 5년 평균 포함)
-# ---------------------------------------------------------------------
-with tab3:
-    st.subheader(f"📊 전체 종목 조건별 통과/탈락 현황 ({len(annotated_df)}개 기업)")
-    render_hover_chips_guide()
-
-    filter_mode = st.radio(
-        "표시할 그룹 선택",
-        options=["전체 보기", "아깝게 1개 조건만 미달한 기업만 보기", "최종 통과 기업만 보기"],
-        horizontal=True,
-    )
-
-    mat_df = annotated_df.copy()
-    active_cnt = sum(1 for r in active_rules if r.get("enabled", True))
-
-    if filter_mode == "아깝게 1개 조건만 미달한 기업만 보기" and active_cnt > 1:
-        target_str = f"{active_cnt - 1} / {active_cnt}"
-        mat_df = mat_df[mat_df["통과_조건수"] == target_str]
-    elif filter_mode == "최종 통과 기업만 보기":
-        mat_df = mat_df[mat_df["최종_통과"] == True]
-
-    mat_df = mat_df.reset_index(drop=True)
-    mat_df["⭐ 유니버스"] = mat_df["symbol"].apply(lambda s: "⭐ 보관중" if s in universe_store else "")
-
-    pass_cols = [c for c in mat_df.columns if c.startswith("통과_") and c != "통과_조건수"]
-    base_mat_cols = [
-        "⭐ 유니버스",
-        "symbol",
-        "name",
-        "market_display",
-        "시가총액_표시",
-        "통과_조건수",
-        "정상화 FCF 수익률 (%)",
-        "역DCF 기대성장률 (%)",
-        "GPM (%)",
-        "GPM_5Y (%)",
-        "ROCE (%)",
-        "ROCE_5Y (%)",
-        "CCR (%)",
-        "CCR_5Y (%)",
-        "OPM (%)",
-        "OPM_5Y (%)",
-        "CCR 상태 진단",
-        "이자보상배율_표시",
-    ] + pass_cols
-
-    st.caption("👉 **기업 행을 클릭**하면 해당 기업의 **[🏢 기업 심층 상세 페이지]**로 즉시 화면이 전환됩니다.")
-    event_matrix = st.dataframe(
-        mat_df[base_mat_cols].style.format(
-            {
-                "정상화 FCF 수익률 (%)": "{:.2f}%",
-                "역DCF 기대성장률 (%)": "{:+.2f}%",
-                "GPM (%)": "{:.1f}%",
-                "GPM_5Y (%)": "{:.1f}%",
-                "ROCE (%)": "{:.1f}%",
-                "ROCE_5Y (%)": "{:.1f}%",
-                "CCR (%)": "{:.1f}%",
-                "CCR_5Y (%)": "{:.1f}%",
-                "OPM (%)": "{:.1f}%",
-                "OPM_5Y (%)": "{:.1f}%",
-            },
-            na_rep="N/A",
-        ),
-        use_container_width=True,
-        height=600,
-        on_select="rerun",
-        selection_mode="single-row",
-        key="df_matrix_table",
-    )
-
-    if event_matrix and hasattr(event_matrix, "selection"):
-        m_rows = event_matrix.selection.get("rows", [])
-        if m_rows:
-            sel_idx = m_rows[0]
-            if sel_idx < len(mat_df):
-                clicked_sym = mat_df.iloc[sel_idx]["symbol"]
-                open_company_detail(clicked_sym, return_tab="screener")
-                st.rerun()
