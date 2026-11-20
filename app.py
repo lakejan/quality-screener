@@ -502,6 +502,12 @@ def format_currency_amount(val: float, market: str) -> str:
         return f"${mil:,.1f}M"
 
 
+def render_raw_html(raw_html: str) -> None:
+    """여러 줄 HTML 문자열의 앞쪽 들여쓰기 공백과 빈 줄을 제거하여 마크다운 코드블록(<pre><code>) 변환을 100% 방지합니다."""
+    clean_html = "\n".join(line.strip() for line in raw_html.splitlines() if line.strip())
+    st.markdown(clean_html, unsafe_allow_html=True)
+
+
 def extract_urls_from_text(text: str) -> List[str]:
     """메모 텍스트 내의 http:// 또는 https:// 웹 URL을 자동 추출합니다."""
     if not text:
@@ -1059,7 +1065,7 @@ def render_company_detail_page(symbol: str) -> None:
         </div>
     </div>
     """
-    st.markdown(hero_html, unsafe_allow_html=True)
+    render_raw_html(hero_html)
 
     # 3. 토스 스타일 N년 정밀 2단계 역DCF & 내재가치 시뮬레이터 카드
     with st.container(border=True):
@@ -1179,7 +1185,7 @@ def render_company_detail_page(symbol: str) -> None:
             </div>
         </div>
         """
-        st.markdown(conclusion_html, unsafe_allow_html=True)
+        render_raw_html(conclusion_html)
 
     # 4. 하단 심층 분석 3단 탭 (5개년 재무 추이 / ROCE 듀퐁 & CCR 브릿지 / 메모 & 링크 관리)
     d_tab1, d_tab2, d_tab3 = st.tabs([
@@ -1622,7 +1628,7 @@ if funnel_stats:
             f"</div>"
         )
     funnel_bar_html = "<div class='tds-funnel-bar'>" + "<div class='tds-funnel-sep'>›</div>".join(chips_html) + "</div>"
-    st.markdown(funnel_bar_html, unsafe_allow_html=True)
+    render_raw_html(funnel_bar_html)
 
 
 # =====================================================================
@@ -1848,7 +1854,7 @@ with tab_screener:
                         {memo_preview_html}
                     </div>
                     """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    render_raw_html(card_html)
 
                     btn_c1, btn_c2 = st.columns([3.2, 1.3])
                     with btn_c1:
@@ -2145,7 +2151,7 @@ with tab_universe:
                             {memo_block_html}
                         </div>
                         """
-                        st.markdown(u_card_html, unsafe_allow_html=True)
+                        render_raw_html(u_card_html)
 
                         ub1, ub2, ub3 = st.columns([2.4, 1.4, 1.0])
                         with ub1:
